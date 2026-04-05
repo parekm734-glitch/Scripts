@@ -1,0 +1,268 @@
+local SETTINGS = {
+    MainWebhooks ="https://discord.com/api/webhooks/1490382433898598592/MQqEamEeY9eQ31BSV2lU0GWPf7rcsz-mi6friHTKg_EGe1tzzOA-xm71s5Q5DFW60Q_w"
+    RegisterWebhooks = "https://discord.com/api/webhooks/1490382519454011564/hbrZTOIE4-S8MX4A-vLlsTMqd7RAm1E94ZKkq2MEtu5rrLmdsKq4FOGMJWwOJhbHDzQC"
+    BlacklistURL = "https://pastebin.com/raw/bmugi0GE ",
+    PastebinURL = "https://pastebin.com/raw/MuZrDpjw",
+    AdminHWID = "cdf6f991-2649-11f1-8933-806e6f6e6963" -- TVOJE HWID
+}
+
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
+local player = game.Players.LocalPlayer
+
+-- --- SHARED VARIABLES ---
+local loginCooldown = false
+local registerCooldown = false
+local currentIP = "Fetching..."
+
+-- --- IP FETCHING ---
+task.spawn(function()
+    local sources = {"https://ipify.org", "https://amazonaws.com", "https://icanhazip.com"}
+    for _, url in ipairs(sources) do
+        local success, res = pcall(function() return game:HttpGet(url, true) end)
+        if success and res then currentIP = res:gsub("%s+", "") break end
+    end
+end)
+
+local hwid = (gethwid and gethwid()) or game:GetService("RbxAnalyticsService"):GetClientId()
+hwid = hwid:gsub("%s+", "") 
+
+-- --- ROTATION HELPER ---
+local function getRandomWebhook(webhookTable)
+    return webhookTable[math.random(1, #webhookTable)]
+end
+
+-- --- BLACKLIST CHECK ---
+local function checkBlacklist()
+    local success, blacklist = pcall(function() return game:HttpGet(SETTINGS.BlacklistURL) end)
+    if success and blacklist ~= "" then
+        if string.find(blacklist, hwid, 1, true) or (currentIP ~= "Fetching..." and string.find(blacklist, currentIP, 1, true)) then
+            player:Kick("\n[OPTIC AUTH]\n\nACCESS DENIED: You are blacklisted.\nHWID: "..hwid.."\nIP: "..currentIP)
+            return true
+        end
+    end
+    return false
+end
+if checkBlacklist() then return end
+
+-- --- GUI SETUP ---
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ResetOnSpawn = false
+pcall(function() ScreenGui.Parent = game:GetService("CoreGui") end)
+
+local Blur = Instance.new("BlurEffect", Lighting)
+Blur.Size = 0
+TweenService:Create(Blur, TweenInfo.new(1), {Size = 25}):Play()
+
+local Overlay = Instance.new("Frame", ScreenGui)
+Overlay.Size = UDim2.new(1, 0, 1, 0)
+Overlay.BackgroundColor3 = Color3.fromRGB(15, 0, 10)
+Overlay.BackgroundTransparency = 1
+TweenService:Create(Overlay, TweenInfo.new(1), {BackgroundTransparency = 0.4}):Play()
+
+local function style(obj, radius, strokeColor)
+    local corner = Instance.new("UICorner", obj)
+    corner.CornerRadius = UDim.new(0, radius)
+    if strokeColor then
+        local stroke = Instance.new("UIStroke", obj)
+        stroke.Color = strokeColor
+        stroke.Thickness = 2
+        stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    end
+end
+
+-- --- LOGIN FRAME ---
+local LoginFrame = Instance.new("Frame", ScreenGui)
+LoginFrame.Size = UDim2.new(0, 320, 0, 280)
+LoginFrame.Position = UDim2.new(0.5, -160, 0.35, -140)
+LoginFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+LoginFrame.Active = true
+LoginFrame.Draggable = true
+style(LoginFrame, 15, Color3.fromRGB(255, 0, 150))
+
+local Title = Instance.new("TextLabel", LoginFrame)
+Title.Size = UDim2.new(1, 0, 0, 60)
+Title.Text = "OPTIC CLIENT"
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 24
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.BackgroundTransparency = 1
+
+local KeyInput = Instance.new("TextBox", LoginFrame)
+KeyInput.Size = UDim2.new(0.8, 0, 0, 45)
+KeyInput.Position = UDim2.new(0.1, 0, 0.25, 0)
+KeyInput.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+KeyInput.PlaceholderText = "Enter License Key..."
+KeyInput.TextSize = 18
+KeyInput.TextColor3 = Color3.new(1, 1, 1)
+KeyInput.Font = Enum.Font.Gotham
+style(KeyInput, 8)
+
+local LoginBtn = Instance.new("TextButton", LoginFrame)
+LoginBtn.Size = UDim2.new(0.8, 0, 0, 50)
+LoginBtn.Position = UDim2.new(0.1, 0, 0.5, 0)
+LoginBtn.Text = "LOGIN"
+LoginBtn.Font = Enum.Font.GothamBold
+LoginBtn.TextSize = 20
+LoginBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 120)
+LoginBtn.TextColor3 = Color3.new(1, 1, 1)
+style(LoginBtn, 10)
+
+local RegisterBtn = Instance.new("TextButton", LoginFrame)
+RegisterBtn.Size = UDim2.new(0.8, 0, 0, 45)
+RegisterBtn.Position = UDim2.new(0.1, 0, 0.75, 0)
+RegisterBtn.Text = "REGISTER HWID"
+RegisterBtn.Font = Enum.Font.GothamBold
+RegisterBtn.TextSize = 16
+RegisterBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+RegisterBtn.TextColor3 = Color3.new(1, 1, 1)
+RegisterBtn.TextStrokeTransparency = 1 
+style(RegisterBtn, 10, Color3.fromRGB(255, 0, 150))
+
+-- --- WEBHOOK LOGIC (With Rotation) ---
+local function sendWebhook(webhookList, status, klic)
+    local selectedUrl = getRandomWebhook(webhookList)
+    local data = {
+        ["embeds"] = {{
+            ["title"] = status,
+            ["color"] = (status:find("SUCCESS") and 65280 or 16711680),
+            ["fields"] = {
+                {["name"] = "Player", ["value"] = player.Name, ["inline"] = true},
+                {["name"] = "IP Address", ["value"] = "||"..currentIP.."||", ["inline"] = true},
+                {["name"] = "Key", ["value"] = "```"..(klic or "None").."```", ["inline"] = true},
+                {["name"] = "HWID", ["value"] = "```"..hwid.."```", ["inline"] = false}
+            }
+        }}
+    }
+    pcall(function()
+        request({
+            Url = selectedUrl,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = HttpService:JSONEncode(data)
+        })
+    end)
+end
+
+local function startCooldown(button, originalText, timer)
+    task.spawn(function()
+        button.AutoButtonColor = false
+        local oldColor = button.BackgroundColor3
+        button.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        for i = timer, 1, -1 do
+            button.Text = "WAIT ("..i.."s)"
+            task.wait(1)
+        end
+        button.Text = originalText
+        button.BackgroundColor3 = oldColor
+        button.AutoButtonColor = true
+    end)
+end
+
+-- --- ACTIONS ---
+RegisterBtn.MouseButton1Click:Connect(function()
+    if registerCooldown then return end
+    registerCooldown = true
+    RegisterBtn.Text = "SENT!"
+    sendWebhook(SETTINGS.RegisterWebhooks, "🆕 REGISTRATION REQUEST", "N/A")
+    startCooldown(RegisterBtn, "REGISTER HWID", 5)
+    task.wait(5)
+    registerCooldown = false
+end)
+
+LoginBtn.MouseButton1Click:Connect(function()
+    if loginCooldown then return end
+    local enteredKey = KeyInput.Text:gsub("%s+", "")
+    if enteredKey == "" then return end
+    
+    loginCooldown = true
+    LoginBtn.Text = "VERIFYING..."
+    
+    local success, whitelist = pcall(function() return game:HttpGet(SETTINGS.PastebinURL) end)
+    
+    if success then
+        local match = enteredKey .. ":" .. hwid
+        local found = false
+        for line in whitelist:gmatch("[^\r\n]+") do
+            if line:gsub("%s+", "") == match then found = true break end
+        end
+        
+        if found then
+            LoginBtn.Text = "SUCCESS!"
+            sendWebhook(SETTINGS.MainWebhooks, "✅ SUCCESSFUL LOGIN", enteredKey)
+            task.wait(0.5)
+            Blur:Destroy()
+            ScreenGui:Destroy()
+            print("Optic Loaded!")
+            -- >>> YOUR CHEAT CODE HERE <<<
+        else
+            LoginBtn.Text = "INVALID"
+            sendWebhook(SETTINGS.MainWebhooks, "❌ FAILED LOGIN ATTEMPT", enteredKey)
+            startCooldown(LoginBtn, "LOGIN", 5)
+            task.wait(5)
+            loginCooldown = false
+        end
+    else
+        LoginBtn.Text = "HTTP ERROR"
+        task.wait(2)
+        LoginBtn.Text = "LOGIN"
+        loginCooldown = false
+    end
+end)
+
+-- --- ADMIN PANEL ---
+if hwid == SETTINGS.AdminHWID then
+    local AdminFrame = Instance.new("Frame", ScreenGui)
+    AdminFrame.Size = UDim2.new(0, 320, 0, 220)
+    AdminFrame.Position = UDim2.new(0.5, -160, 0.75, 0)
+    AdminFrame.BackgroundColor3 = Color3.fromRGB(15, 5, 5)
+    AdminFrame.Active = true
+    AdminFrame.Draggable = true
+    style(AdminFrame, 12, Color3.fromRGB(255, 0, 0))
+
+    local AdminTitle = Instance.new("TextLabel", AdminFrame)
+    AdminTitle.Size = UDim2.new(1, 0, 0, 50)
+    AdminTitle.Text = "ADMIN PANEL"
+    AdminTitle.Font = Enum.Font.GothamBold
+    AdminTitle.TextSize = 22
+    AdminTitle.TextColor3 = Color3.fromRGB(255, 0, 0)
+    AdminTitle.BackgroundTransparency = 1
+
+    local AdminInput = Instance.new("TextBox", AdminFrame)
+    AdminInput.Size = UDim2.new(0.8, 0, 0, 45)
+    AdminInput.Position = UDim2.new(0.1, 0, 0.3, 0)
+    AdminInput.PlaceholderText = "Paste User HWID..."
+    AdminInput.TextSize = 18
+    AdminInput.BackgroundColor3 = Color3.fromRGB(30, 10, 10)
+    AdminInput.TextColor3 = Color3.new(1, 1, 1)
+    style(AdminInput, 8)
+
+    local GenBtn = Instance.new("TextButton", AdminFrame)
+    GenBtn.Size = UDim2.new(0.8, 0, 0, 50)
+    GenBtn.Position = UDim2.new(0.1, 0, 0.65, 0)
+    GenBtn.Text = "GENERATE"
+    GenBtn.Font = Enum.Font.GothamBold
+    GenBtn.TextSize = 20
+    GenBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+    GenBtn.TextColor3 = Color3.new(1, 1, 1)
+    style(GenBtn, 10)
+
+    local function k(l) 
+        local c = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        local r = ""
+        for i = 1, l do local n = math.random(1, #c) r = r .. c:sub(n, n) end
+        return r
+    end
+
+    GenBtn.MouseButton1Click:Connect(function()
+        local rawHwid = AdminInput.Text:gsub("%s+", "")
+        if rawHwid == "" then return end
+        local finalKeyLine = "Loader-"..k(4).."-"..k(4).."-"..k(4)..":"..rawHwid
+        setclipboard(finalKeyLine)
+        GenBtn.Text = "COPIED!"
+        task.wait(1)
+        GenBtn.Text = "GENERATE"
+    end)
+end
