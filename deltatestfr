@@ -1,0 +1,1277 @@
+--[[
+    ===================================================================
+    ⚡ WORLD GUI - Staggered Dropdown & Clean Collapse Fade Fix
+    ===================================================================
+    - On Execution: Small Modal Popup centered on screen:
+        - WORLD centered at top
+        - Full crisp white accent line divider
+        - Two Big Choice Buttons: [ MOBILE ]  [ PC ]
+    - Picking "PC": Hides the floating mobile button on the left.
+    - Picking "MOBILE": Keeps the floating mobile button on the left.
+    - Toggle Key: Right Shift (Enum.KeyCode.RightShift)
+    - Tree Branch Layout (Starts closed by default on launch)
+    - STAGGERED CASCADING ANIMATION: Sub-tabs drop down sequentially 
+      (enemy -> npc -> other) with smooth slide & fade effects!
+    - FIXED: Active white indicator bar fades out smoothly during collapse 
+      (Zero lingering white dots or floating line artifacts!)
+    - 100% Unclipped 4-Sided White Rectangular Highlights
+    ===================================================================
+--]]
+
+local WorldGUI = {}
+WorldGUI.__index = WorldGUI
+
+-- Services
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- Utility Functions
+local function Tween(object, info, properties)
+    local tween = TweenService:Create(object, info, properties)
+    tween:Play()
+    return tween
+end
+
+-- Theme Palette (Monochrome Dark Gray / Black with Crisp White Accents)
+local Theme = {
+    Background = Color3.fromRGB(10, 11, 14),
+    Sidebar = Color3.fromRGB(16, 17, 21),
+    Header = Color3.fromRGB(14, 15, 19),
+    Card = Color3.fromRGB(26, 29, 36),
+    CardHover = Color3.fromRGB(34, 38, 48),
+    Border = Color3.fromRGB(45, 48, 58),
+    WhiteLine = Color3.fromRGB(245, 245, 250),
+    WhiteLineMuted = Color3.fromRGB(110, 115, 125),
+    TextMain = Color3.fromRGB(250, 250, 250),
+    TextMuted = Color3.fromRGB(140, 145, 155),
+    Success = Color3.fromRGB(245, 245, 250),
+    ToggleOff = Color3.fromRGB(30, 32, 40)
+}
+
+-- Create Matching Accent Line Helper
+local function CreateAccentLine(parent, position, size)
+    local Line = Instance.new("Frame")
+    Line.Name = "AccentLine"
+    Line.Size = size or UDim2.new(1, -30, 0, 1)
+    Line.Position = position or UDim2.new(0, 15, 0, 0)
+    Line.BackgroundColor3 = Theme.WhiteLine
+    Line.BorderSizePixel = 0
+    Line.Parent = parent
+
+    local Gradient = Instance.new("UIGradient")
+    Gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Theme.WhiteLine),
+        ColorSequenceKeypoint.new(0.65, Theme.Border),
+        ColorSequenceKeypoint.new(1, Theme.Sidebar)
+    })
+    Gradient.Parent = Line
+    return Line
+end
+
+function WorldGUI.new(titleText)
+    local self = setmetatable({}, WorldGUI)
+    
+    self.Title = titleText or "World"
+    self.Categories = {}
+    self.AllSubTabs = {}
+    self.ActiveSubTab = nil
+    self.IsOpen = false
+    self.ToggleKey = Enum.KeyCode.RightShift
+    self.DeviceMode = nil
+    
+    -- Target Parent Container
+    local ParentContainer = (gethui and gethui()) or CoreGui:FindFirstChild("RobloxGui") or LocalPlayer:WaitForChild("PlayerGui")
+    
+    -- Clean existing instance
+    if ParentContainer:FindFirstChild("WorldGUI_Container") then
+        ParentContainer.WorldGUI_Container:Destroy()
+    end
+
+    -- Main ScreenGui
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "WorldGUI_Container"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    ScreenGui.Parent = ParentContainer
+    self.ScreenGui = ScreenGui
+
+    ---------------------------------------------------------
+    -- 1. DEVICE SELECTION MODAL POPUP
+    ---------------------------------------------------------
+    local ModalFrame = Instance.new("Frame")
+    ModalFrame.Name = "DeviceModalFrame"
+    ModalFrame.Size = UDim2.new(0, 380, 0, 210)
+    ModalFrame.Position = UDim2.new(0.5, -190, 0.5, -105)
+    ModalFrame.BackgroundColor3 = Theme.Background
+    ModalFrame.BorderSizePixel = 1
+    ModalFrame.BorderColor3 = Theme.Border
+    ModalFrame.ZIndex = 100
+    ModalFrame.Parent = ScreenGui
+
+    -- Modal Top Crisp White Accent Line
+    local ModalTopLine = Instance.new("Frame")
+    ModalTopLine.Size = UDim2.new(1, 0, 0, 1)
+    ModalTopLine.BackgroundColor3 = Theme.WhiteLine
+    ModalTopLine.BorderSizePixel = 0
+    ModalTopLine.ZIndex = 101
+    ModalTopLine.Parent = ModalFrame
+
+    -- Glowing Centered Title "WORLD"
+    local ModalLogoGlow = Instance.new("TextLabel")
+    ModalLogoGlow.Size = UDim2.new(1, 0, 0, 48)
+    ModalLogoGlow.Position = UDim2.new(0, 0, 0, 6)
+    ModalLogoGlow.BackgroundTransparency = 1
+    ModalLogoGlow.Text = string.upper(self.Title)
+    ModalLogoGlow.Font = Enum.Font.GothamBlack
+    ModalLogoGlow.TextSize = 26
+    ModalLogoGlow.TextColor3 = Theme.WhiteLine
+    ModalLogoGlow.TextTransparency = 0.4
+    ModalLogoGlow.TextXAlignment = Enum.TextXAlignment.Center
+    ModalLogoGlow.ZIndex = 101
+    ModalLogoGlow.Parent = ModalFrame
+
+    local ModalLogo = Instance.new("TextLabel")
+    ModalLogo.Size = UDim2.new(1, 0, 0, 48)
+    ModalLogo.Position = UDim2.new(0, 0, 0, 4)
+    ModalLogo.BackgroundTransparency = 1
+    ModalLogo.Text = string.upper(self.Title)
+    ModalLogo.Font = Enum.Font.GothamBlack
+    ModalLogo.TextSize = 26
+    ModalLogo.TextColor3 = Theme.TextMain
+    ModalLogo.TextXAlignment = Enum.TextXAlignment.Center
+    ModalLogo.ZIndex = 102
+    ModalLogo.Parent = ModalFrame
+
+    -- Whole White Line Under Logo
+    local ModalDivider = Instance.new("Frame")
+    ModalDivider.Name = "ModalDivider"
+    ModalDivider.Size = UDim2.new(1, -40, 0, 1)
+    ModalDivider.Position = UDim2.new(0, 20, 0, 58)
+    ModalDivider.BackgroundColor3 = Theme.WhiteLine
+    ModalDivider.BorderSizePixel = 0
+    ModalDivider.ZIndex = 101
+    ModalDivider.Parent = ModalFrame
+
+    local ModalDividerGradient = Instance.new("UIGradient")
+    ModalDividerGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Theme.Border),
+        ColorSequenceKeypoint.new(0.5, Theme.WhiteLine),
+        ColorSequenceKeypoint.new(1, Theme.Border)
+    })
+    ModalDividerGradient.Parent = ModalDivider
+
+    -- Subtitle prompt label
+    local ModalPrompt = Instance.new("TextLabel")
+    ModalPrompt.Size = UDim2.new(1, 0, 0, 20)
+    ModalPrompt.Position = UDim2.new(0, 0, 0, 72)
+    ModalPrompt.BackgroundTransparency = 1
+    ModalPrompt.Text = "SELECT YOUR PLATFORM"
+    ModalPrompt.Font = Enum.Font.GothamBold
+    ModalPrompt.TextSize = 11
+    ModalPrompt.TextColor3 = Theme.TextMuted
+    ModalPrompt.TextXAlignment = Enum.TextXAlignment.Center
+    ModalPrompt.ZIndex = 101
+    ModalPrompt.Parent = ModalFrame
+
+    -- Button Holder Container for Mobile and PC
+    local ButtonContainer = Instance.new("Frame")
+    ButtonContainer.Size = UDim2.new(1, -40, 0, 80)
+    ButtonContainer.Position = UDim2.new(0, 20, 0, 104)
+    ButtonContainer.BackgroundTransparency = 1
+    ButtonContainer.ZIndex = 101
+    ButtonContainer.Parent = ModalFrame
+
+    -- BIG BUTTON 1: MOBILE
+    local MobileBtnModal = Instance.new("TextButton")
+    MobileBtnModal.Name = "MobileChoice"
+    MobileBtnModal.Size = UDim2.new(0.48, -5, 1, 0)
+    MobileBtnModal.Position = UDim2.new(0, 0, 0, 0)
+    MobileBtnModal.BackgroundColor3 = Theme.Card
+    MobileBtnModal.BorderColor3 = Theme.Border
+    MobileBtnModal.BorderSizePixel = 1
+    MobileBtnModal.Text = "MOBILE"
+    MobileBtnModal.Font = Enum.Font.GothamBold
+    MobileBtnModal.TextSize = 14
+    MobileBtnModal.TextColor3 = Theme.TextMain
+    MobileBtnModal.AutoButtonColor = false
+    MobileBtnModal.ZIndex = 102
+    MobileBtnModal.Parent = ButtonContainer
+
+    -- BIG BUTTON 2: PC
+    local PCBtnModal = Instance.new("TextButton")
+    PCBtnModal.Name = "PCChoice"
+    PCBtnModal.Size = UDim2.new(0.48, -5, 1, 0)
+    PCBtnModal.Position = UDim2.new(0.52, 5, 0, 0)
+    PCBtnModal.BackgroundColor3 = Theme.Card
+    PCBtnModal.BorderColor3 = Theme.Border
+    PCBtnModal.BorderSizePixel = 1
+    PCBtnModal.Text = "PC"
+    PCBtnModal.Font = Enum.Font.GothamBold
+    PCBtnModal.TextSize = 14
+    PCBtnModal.TextColor3 = Theme.TextMain
+    PCBtnModal.AutoButtonColor = false
+    PCBtnModal.ZIndex = 102
+    PCBtnModal.Parent = ButtonContainer
+
+    -- Button Hover Effects
+    local function SetupModalBtnHover(btn)
+        btn.MouseEnter:Connect(function()
+            Tween(btn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.CardHover, BorderColor3 = Theme.WhiteLine})
+        end)
+        btn.MouseLeave:Connect(function()
+            Tween(btn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.Card, BorderColor3 = Theme.Border})
+        end)
+    end
+    SetupModalBtnHover(MobileBtnModal)
+    SetupModalBtnHover(PCBtnModal)
+
+    ---------------------------------------------------------
+    -- 2. MAIN FRAME (Sharp Edges, Monochrome Theme)
+    ---------------------------------------------------------
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Name = "MainFrame"
+    MainFrame.Size = UDim2.new(0, 680, 0, 440)
+    MainFrame.Position = UDim2.new(0.5, -340, 0.5, -220)
+    MainFrame.BackgroundColor3 = Theme.Background
+    MainFrame.BorderSizePixel = 1
+    MainFrame.BorderColor3 = Theme.Border
+    MainFrame.Visible = false
+    MainFrame.ClipsDescendants = false
+    MainFrame.Parent = ScreenGui
+    self.MainFrame = MainFrame
+
+    -- Automatic Resolution Scaling
+    local UIScale = Instance.new("UIScale")
+    UIScale.Parent = MainFrame
+    self.UIScale = UIScale
+
+    local function UpdateScale()
+        local camera = workspace.CurrentCamera
+        if camera then
+            local viewportSize = camera.ViewportSize
+            if viewportSize.X < 700 or viewportSize.Y < 500 then
+                local scale = math.min(viewportSize.X / 720, viewportSize.Y / 480)
+                UIScale.Scale = math.clamp(scale, 0.65, 1)
+            else
+                UIScale.Scale = 1
+            end
+        end
+    end
+    UpdateScale()
+    if workspace.CurrentCamera then
+        workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(UpdateScale)
+    end
+
+    -- Top Crisp White Line Accent
+    local TopAccent = Instance.new("Frame")
+    TopAccent.Name = "TopAccent"
+    TopAccent.Size = UDim2.new(1, 0, 0, 1)
+    TopAccent.Position = UDim2.new(0, 0, 0, 0)
+    TopAccent.BackgroundColor3 = Theme.WhiteLine
+    TopAccent.BorderSizePixel = 0
+    TopAccent.Parent = MainFrame
+
+    -- Left Sidebar Container
+    local Sidebar = Instance.new("Frame")
+    Sidebar.Name = "Sidebar"
+    Sidebar.Size = UDim2.new(0, 200, 1, -1)
+    Sidebar.Position = UDim2.new(0, 0, 0, 1)
+    Sidebar.BackgroundColor3 = Theme.Sidebar
+    Sidebar.BorderSizePixel = 0
+    Sidebar.Parent = MainFrame
+
+    -- Vertical Border Line between Sidebar and Content
+    local VerticalLine = Instance.new("Frame")
+    VerticalLine.Name = "VerticalLine"
+    VerticalLine.Size = UDim2.new(0, 1, 1, 0)
+    VerticalLine.Position = UDim2.new(1, -1, 0, 0)
+    VerticalLine.BackgroundColor3 = Theme.Border
+    VerticalLine.BorderSizePixel = 0
+    VerticalLine.Parent = Sidebar
+
+    -- Logo Container (Top Left)
+    local LogoContainer = Instance.new("Frame")
+    LogoContainer.Name = "LogoContainer"
+    LogoContainer.Size = UDim2.new(1, 0, 0, 58)
+    LogoContainer.BackgroundTransparency = 1
+    LogoContainer.Parent = Sidebar
+
+    -- Glowing White "World" Text (Back Glow Layer)
+    local LogoGlow = Instance.new("TextLabel")
+    LogoGlow.Name = "LogoGlow"
+    LogoGlow.Size = UDim2.new(1, -30, 1, 0)
+    LogoGlow.Position = UDim2.new(0, 20, 0, 2)
+    LogoGlow.BackgroundTransparency = 1
+    LogoGlow.Text = self.Title
+    LogoGlow.Font = Enum.Font.GothamBlack
+    LogoGlow.TextSize = 24
+    LogoGlow.TextColor3 = Theme.WhiteLine
+    LogoGlow.TextTransparency = 0.4
+    LogoGlow.TextXAlignment = Enum.TextXAlignment.Left
+    LogoGlow.Parent = LogoContainer
+
+    -- Glowing White "World" Text (Front Layer)
+    local LogoText = Instance.new("TextLabel")
+    LogoText.Name = "LogoText"
+    LogoText.Size = UDim2.new(1, -30, 1, 0)
+    LogoText.Position = UDim2.new(0, 20, 0, 0)
+    LogoText.BackgroundTransparency = 1
+    LogoText.Text = self.Title
+    LogoText.Font = Enum.Font.GothamBlack
+    LogoText.TextSize = 24
+    LogoText.TextColor3 = Theme.TextMain
+    LogoText.TextXAlignment = Enum.TextXAlignment.Left
+    LogoText.Parent = LogoContainer
+
+    -- MATCHING LINE #1: Below World Logo
+    CreateAccentLine(Sidebar, UDim2.new(0, 15, 0, 58), UDim2.new(1, -30, 0, 1))
+
+    -- Main Categories Scrolling Container
+    local TabHolder = Instance.new("ScrollingFrame")
+    TabHolder.Name = "TabHolder"
+    TabHolder.Size = UDim2.new(1, 0, 1, -120)
+    TabHolder.Position = UDim2.new(0, 0, 0, 64)
+    TabHolder.BackgroundTransparency = 1
+    TabHolder.BorderSizePixel = 0
+    TabHolder.ScrollBarThickness = 3
+    TabHolder.ScrollBarImageColor3 = Theme.Border
+    TabHolder.CanvasSize = UDim2.new(0, 0, 0, 0)
+    TabHolder.Parent = Sidebar
+
+    local SidebarListLayout = Instance.new("UIListLayout")
+    SidebarListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    SidebarListLayout.Padding = UDim.new(0, 6)
+    SidebarListLayout.Parent = TabHolder
+
+    local SidebarPadding = Instance.new("UIPadding")
+    SidebarPadding.PaddingLeft = UDim.new(0, 10)
+    SidebarPadding.PaddingRight = UDim.new(0, 10)
+    SidebarPadding.PaddingTop = UDim.new(0, 6)
+    SidebarPadding.PaddingBottom = UDim.new(0, 6)
+    SidebarPadding.Parent = TabHolder
+
+    SidebarListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        TabHolder.CanvasSize = UDim2.new(0, 0, 0, SidebarListLayout.AbsoluteContentSize.Y + 20)
+    end)
+
+    -- Bottom Separated Container for Settings
+    local BottomSidebarContainer = Instance.new("Frame")
+    BottomSidebarContainer.Name = "BottomSidebarContainer"
+    BottomSidebarContainer.Size = UDim2.new(1, -20, 0, 46)
+    BottomSidebarContainer.Position = UDim2.new(0, 10, 1, -50)
+    BottomSidebarContainer.BackgroundTransparency = 1
+    BottomSidebarContainer.Parent = Sidebar
+
+    -- MATCHING LINE #2: Above Settings Tab
+    CreateAccentLine(BottomSidebarContainer, UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 0, 1))
+
+    self.TabHolder = TabHolder
+    self.BottomSidebarContainer = BottomSidebarContainer
+
+    -- Right Side Content Area
+    local ContentArea = Instance.new("Frame")
+    ContentArea.Name = "ContentArea"
+    ContentArea.Size = UDim2.new(1, -200, 1, -1)
+    ContentArea.Position = UDim2.new(0, 200, 0, 1)
+    ContentArea.BackgroundColor3 = Theme.Background
+    ContentArea.BorderSizePixel = 0
+    ContentArea.Parent = MainFrame
+    self.ContentArea = ContentArea
+
+    -- Header Bar
+    local HeaderBar = Instance.new("Frame")
+    HeaderBar.Name = "HeaderBar"
+    HeaderBar.Size = UDim2.new(1, 0, 0, 48)
+    HeaderBar.BackgroundColor3 = Theme.Header
+    HeaderBar.BorderSizePixel = 0
+    HeaderBar.Parent = ContentArea
+
+    local HeaderBottomLine = Instance.new("Frame")
+    HeaderBottomLine.Name = "HeaderBottomLine"
+    HeaderBottomLine.Size = UDim2.new(1, 0, 0, 1)
+    HeaderBottomLine.Position = UDim2.new(0, 0, 1, -1)
+    HeaderBottomLine.BackgroundColor3 = Theme.Border
+    HeaderBottomLine.BorderSizePixel = 0
+    HeaderBottomLine.Parent = HeaderBar
+
+    local HeaderTitle = Instance.new("TextLabel")
+    HeaderTitle.Name = "HeaderTitle"
+    HeaderTitle.Size = UDim2.new(1, -20, 1, 0)
+    HeaderTitle.Position = UDim2.new(0, 20, 0, 0)
+    HeaderTitle.BackgroundTransparency = 1
+    HeaderTitle.Text = "Dashboard"
+    HeaderTitle.Font = Enum.Font.GothamBold
+    HeaderTitle.TextSize = 15
+    HeaderTitle.TextColor3 = Theme.TextMain
+    HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
+    HeaderTitle.Parent = HeaderBar
+    self.HeaderTitle = HeaderTitle
+
+    -- Page Container for SubTab views
+    local PageContainer = Instance.new("Frame")
+    PageContainer.Name = "PageContainer"
+    PageContainer.Size = UDim2.new(1, 0, 1, -48)
+    PageContainer.Position = UDim2.new(0, 0, 0, 48)
+    PageContainer.BackgroundTransparency = 1
+    PageContainer.Parent = ContentArea
+    self.PageContainer = PageContainer
+
+    -- Floating Mobile Quick Toggle Button
+    local MobileBtn = Instance.new("TextButton")
+    MobileBtn.Name = "WorldGUI_MobileToggle"
+    MobileBtn.Size = UDim2.new(0, 44, 0, 44)
+    MobileBtn.Position = UDim2.new(0, 15, 0.5, -22)
+    MobileBtn.BackgroundColor3 = Theme.Background
+    MobileBtn.BorderColor3 = Theme.WhiteLine
+    MobileBtn.BorderSizePixel = 1
+    MobileBtn.Text = "W"
+    MobileBtn.Font = Enum.Font.GothamBlack
+    MobileBtn.TextSize = 20
+    MobileBtn.TextColor3 = Theme.TextMain
+    MobileBtn.Visible = false
+    MobileBtn.Parent = ScreenGui
+    self.MobileBtn = MobileBtn
+
+    self:_MakeDraggable(MobileBtn, MobileBtn)
+
+    MobileBtn.MouseButton1Click:Connect(function()
+        self:Toggle()
+    end)
+
+    -- Handle Modal Selections (PC vs Mobile)
+    local function SelectDeviceMode(mode)
+        self.DeviceMode = mode
+        
+        Tween(ModalFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Position = UDim2.new(0.5, -190, 0.5, -85)
+        })
+        
+        task.delay(0.2, function()
+            ModalFrame:Destroy()
+            
+            if mode == "PC" then
+                MobileBtn.Visible = false
+            else
+                MobileBtn.Visible = true
+            end
+            
+            self:Toggle(true)
+        end)
+    end
+
+    MobileBtnModal.MouseButton1Click:Connect(function()
+        SelectDeviceMode("Mobile")
+    end)
+
+    PCBtnModal.MouseButton1Click:Connect(function()
+        SelectDeviceMode("PC")
+    end)
+
+    -- Setup Draggable Engine
+    self:_MakeDraggable(Sidebar, MainFrame)
+    self:_MakeDraggable(HeaderBar, MainFrame)
+    self:_MakeDraggable(ModalFrame, ModalFrame)
+
+    -- RIGHT SHIFT TOGGLE KEYBIND
+    UserInputService.InputBegan:Connect(function(input, processed)
+        if not processed and input.KeyCode == self.ToggleKey then
+            self:Toggle()
+        end
+    end)
+
+    return self
+end
+
+-- Draggable Engine
+function WorldGUI:_MakeDraggable(dragTrigger, targetFrame)
+    local dragging = false
+    local dragInput, dragStart, startPos
+
+    local function update(input)
+        local delta = input.Position - dragStart
+        targetFrame.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+
+    dragTrigger.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = targetFrame.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    dragTrigger.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
+        end
+    end)
+end
+
+-- Open/Close Animation Toggle
+function WorldGUI:Toggle(state)
+    if state ~= nil then
+        self.IsOpen = state
+    else
+        self.IsOpen = not self.IsOpen
+    end
+
+    if self.IsOpen then
+        self.MainFrame.Visible = true
+        Tween(self.MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Position = UDim2.new(0.5, -340, 0.5, -220)
+        })
+    else
+        local targetTween = Tween(self.MainFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            Position = UDim2.new(0.5, -340, 0.5, -180)
+        })
+        targetTween.Completed:Connect(function()
+            if not self.IsOpen then
+                self.MainFrame.Visible = false
+            end
+        end)
+    end
+end
+
+---------------------------------------------------------
+-- TREE BRANCH DROPDOWN SYSTEM (CLEAN COLLAPSE FADE)
+---------------------------------------------------------
+
+function WorldGUI:CreateCategory(categoryName, isBottom)
+    local Library = self
+
+    local Category = {}
+    Category.Name = categoryName
+    Category.Library = Library
+    Category.SubTabs = {}
+    Category.Expanded = false -- STARTS CLOSED ON LAUNCH
+    Category.IsBottom = isBottom
+
+    local parentContainer = isBottom and Library.BottomSidebarContainer or Library.TabHolder
+
+    -- Wrapper Frame for Category Header + SubTabs Tree
+    local CategoryWrapper = Instance.new("Frame")
+    CategoryWrapper.Name = "Category_" .. categoryName
+    CategoryWrapper.Size = UDim2.new(1, 0, 0, isBottom and 40 or 34)
+    CategoryWrapper.AutomaticSize = Enum.AutomaticSize.Y
+    CategoryWrapper.BackgroundTransparency = 1
+    CategoryWrapper.Position = isBottom and UDim2.new(0, 0, 0, 8) or UDim2.new(0, 0, 0, 0)
+    CategoryWrapper.Parent = parentContainer
+
+    local WrapperLayout = Instance.new("UIListLayout")
+    WrapperLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    WrapperLayout.Padding = UDim.new(0, 4)
+    WrapperLayout.Parent = CategoryWrapper
+
+    -- Category Main Header Button
+    local HeaderBtn = Instance.new("TextButton")
+    HeaderBtn.Name = "00_HeaderBtn"
+    HeaderBtn.Size = UDim2.new(1, -2, 0, 32)
+    HeaderBtn.Position = UDim2.new(0, 0, 0, 0)
+    HeaderBtn.BackgroundColor3 = Theme.Sidebar
+    HeaderBtn.BorderSizePixel = 1
+    HeaderBtn.BorderColor3 = Theme.Border
+    HeaderBtn.Text = ""
+    HeaderBtn.AutoButtonColor = false
+    HeaderBtn.Parent = CategoryWrapper
+
+    local HeaderLabel = Instance.new("TextLabel")
+    HeaderLabel.Name = "HeaderLabel"
+    HeaderLabel.Size = UDim2.new(1, -10, 1, 0)
+    HeaderLabel.Position = UDim2.new(0, 12, 0, 0)
+    HeaderLabel.BackgroundTransparency = 1
+    HeaderLabel.Text = categoryName
+    HeaderLabel.Font = Enum.Font.GothamBold
+    HeaderLabel.TextSize = 13
+    HeaderLabel.TextColor3 = Theme.TextMain
+    HeaderLabel.TextXAlignment = Enum.TextXAlignment.Left
+    HeaderLabel.Parent = HeaderBtn
+
+    -- SubTabs Holder Container
+    local SubHolder = Instance.new("Frame")
+    SubHolder.Name = "SubHolder"
+    SubHolder.Size = UDim2.new(1, 0, 0, 0) -- CLOSED BY DEFAULT (HEIGHT 0)
+    SubHolder.BackgroundTransparency = 1
+    SubHolder.ClipsDescendants = true
+    SubHolder.Parent = CategoryWrapper
+
+    -- Dedicated Sub-Buttons List Frame inside SubHolder
+    local SubListFrame = Instance.new("Frame")
+    SubListFrame.Name = "SubListFrame"
+    SubListFrame.Size = UDim2.new(1, 0, 0, 0)
+    SubListFrame.AutomaticSize = Enum.AutomaticSize.Y
+    SubListFrame.BackgroundTransparency = 1
+    SubListFrame.Parent = SubHolder
+
+    local SubListPadding = Instance.new("UIPadding")
+    SubListPadding.PaddingTop = UDim.new(0, 4)
+    SubListPadding.PaddingBottom = UDim.new(0, 6)
+    SubListPadding.Parent = SubListFrame
+
+    local SubLayout = Instance.new("UIListLayout")
+    SubLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    SubLayout.Padding = UDim.new(0, 5)
+    SubLayout.Parent = SubListFrame
+
+    -- Update Vertical Line Segments so the LAST subtab vertical line stops at center (50%)
+    local function UpdateTreeLines()
+        local count = #Category.SubTabs
+        for i, sub in ipairs(Category.SubTabs) do
+            if sub.VerticalBranch then
+                if i == count then
+                    sub.VerticalBranch.Size = UDim2.new(0, 1, 0.5, 0)
+                else
+                    sub.VerticalBranch.Size = UDim2.new(0, 1, 1, 5)
+                end
+            end
+        end
+    end
+
+    -- STAGGERED CASCADING DROPDOWN ANIMATION (WITH CLEAN ACTIVE INDICATOR FADE)
+    local function AnimateDropdown()
+        local targetHeight = SubLayout.AbsoluteContentSize.Y + 10
+
+        if Category.Expanded then
+            -- 1. Expand SubHolder container height smoothly
+            Tween(SubHolder, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Size = UDim2.new(1, 0, 0, targetHeight)
+            })
+            Tween(HeaderBtn, TweenInfo.new(0.15), {BorderColor3 = Theme.WhiteLine})
+
+            -- 2. Staggered Cascading Animation (Each subtab drops down & fades in one after another!)
+            for i, sub in ipairs(Category.SubTabs) do
+                sub.SubTabItemFrame.Position = UDim2.new(0, 0, 0, -10)
+                sub.SubBtn.BackgroundTransparency = 1
+                sub.SubLabel.TextTransparency = 1
+                if sub.ActiveIndicator and Library.ActiveSubTab == sub then
+                    sub.ActiveIndicator.BackgroundTransparency = 1
+                end
+                if sub.VerticalBranch then sub.VerticalBranch.BackgroundTransparency = 1 end
+                if sub.HorizontalBranch then sub.HorizontalBranch.BackgroundTransparency = 1 end
+
+                task.delay((i - 1) * 0.07, function()
+                    if Category.Expanded then
+                        Tween(sub.SubTabItemFrame, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                            Position = UDim2.new(0, 0, 0, 0)
+                        })
+                        Tween(sub.SubBtn, TweenInfo.new(0.2), {
+                            BackgroundTransparency = 0
+                        })
+                        Tween(sub.SubLabel, TweenInfo.new(0.2), {
+                            TextTransparency = 0
+                        })
+                        if sub.ActiveIndicator and Library.ActiveSubTab == sub then
+                            Tween(sub.ActiveIndicator, TweenInfo.new(0.2), {BackgroundTransparency = 0})
+                        end
+                        if sub.VerticalBranch then
+                            Tween(sub.VerticalBranch, TweenInfo.new(0.2), {BackgroundTransparency = 0})
+                        end
+                        if sub.HorizontalBranch then
+                            Tween(sub.HorizontalBranch, TweenInfo.new(0.2), {BackgroundTransparency = 0})
+                        end
+                    end
+                end)
+            end
+        else
+            -- Reverse Staggered Collapse (Fades out ActiveIndicator so no residual lines stick out!)
+            local count = #Category.SubTabs
+            for i, sub in ipairs(Category.SubTabs) do
+                local reverseIndex = count - i
+                task.delay(reverseIndex * 0.04, function()
+                    if not Category.Expanded then
+                        Tween(sub.SubTabItemFrame, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                            Position = UDim2.new(0, 0, 0, -6)
+                        })
+                        Tween(sub.SubBtn, TweenInfo.new(0.12), {BackgroundTransparency = 1})
+                        Tween(sub.SubLabel, TweenInfo.new(0.12), {TextTransparency = 1})
+                        if sub.ActiveIndicator then
+                            Tween(sub.ActiveIndicator, TweenInfo.new(0.12), {BackgroundTransparency = 1})
+                        end
+                        if sub.VerticalBranch then Tween(sub.VerticalBranch, TweenInfo.new(0.12), {BackgroundTransparency = 1}) end
+                        if sub.HorizontalBranch then Tween(sub.HorizontalBranch, TweenInfo.new(0.12), {BackgroundTransparency = 1}) end
+                    end
+                end)
+            end
+
+            -- Collapse SubHolder container after reverse stagger finishes
+            task.delay(count * 0.04 + 0.04, function()
+                if not Category.Expanded then
+                    Tween(SubHolder, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                        Size = UDim2.new(1, 0, 0, 0)
+                    })
+                    Tween(HeaderBtn, TweenInfo.new(0.15), {BorderColor3 = Theme.Border})
+                end
+            end)
+        end
+    end
+
+    SubLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        if Category.Expanded then
+            SubHolder.Size = UDim2.new(1, 0, 0, SubLayout.AbsoluteContentSize.Y + 10)
+        end
+    end)
+
+    HeaderBtn.MouseButton1Click:Connect(function()
+        if #Category.SubTabs > 0 then
+            Category.Expanded = not Category.Expanded
+            AnimateDropdown()
+        elseif Category.DirectSubTab then
+            Library:SelectSubTab(Category.DirectSubTab)
+        end
+    end)
+
+    Category.CategoryWrapper = CategoryWrapper
+    Category.SubHolder = SubHolder
+    Category.SubListFrame = SubListFrame
+    Category.UpdateTreeLines = UpdateTreeLines
+    table.insert(Library.Categories, Category)
+
+    -- Create SubTab under Category
+    function Category:CreateSubTab(subTabName)
+        local SubTab = {}
+        SubTab.Name = subTabName
+        SubTab.Category = Category
+
+        -- Item Frame containing Vertical Trunk Segment + Horizontal Connector + Sub-Button
+        local SubTabItemFrame = Instance.new("Frame")
+        SubTabItemFrame.Name = "SubTabFrame_" .. subTabName
+        SubTabItemFrame.Size = UDim2.new(1, 0, 0, 30)
+        SubTabItemFrame.BackgroundTransparency = 1
+        SubTabItemFrame.ClipsDescendants = true
+        SubTabItemFrame.Parent = isBottom and CategoryWrapper or SubListFrame
+        SubTab.SubTabItemFrame = SubTabItemFrame
+
+        if not isBottom then
+            -- Vertical Trunk Segment for this item
+            local VerticalBranch = Instance.new("Frame")
+            VerticalBranch.Name = "VerticalBranch"
+            VerticalBranch.Size = UDim2.new(0, 1, 1, 5)
+            VerticalBranch.Position = UDim2.new(0, 12, 0, 0)
+            VerticalBranch.BackgroundColor3 = Theme.WhiteLineMuted
+            VerticalBranch.BorderSizePixel = 0
+            VerticalBranch.ZIndex = 2
+            VerticalBranch.Parent = SubTabItemFrame
+            SubTab.VerticalBranch = VerticalBranch
+
+            -- Horizontal Branch Line connecting from left vertical line to sub-button
+            local HorizontalBranch = Instance.new("Frame")
+            HorizontalBranch.Name = "HorizontalBranch"
+            HorizontalBranch.Size = UDim2.new(0, 10, 0, 1)
+            HorizontalBranch.Position = UDim2.new(0, 12, 0.5, 0)
+            HorizontalBranch.BackgroundColor3 = Theme.WhiteLineMuted
+            HorizontalBranch.BorderSizePixel = 0
+            HorizontalBranch.ZIndex = 2
+            HorizontalBranch.Parent = SubTabItemFrame
+            SubTab.HorizontalBranch = HorizontalBranch
+        end
+
+        -- SubTab Button Frame (Padded 2px Top/Bottom & Right so ALL 4 WHITE BORDER LINES ARE 100% VISIBLE!)
+        local SubBtn = Instance.new("TextButton")
+        SubBtn.Name = "SubBtn"
+        SubBtn.Size = isBottom and UDim2.new(1, -2, 0, 32) or UDim2.new(1, -26, 1, -4)
+        SubBtn.Position = isBottom and UDim2.new(0, 0, 0, 0) or UDim2.new(0, 24, 0, 2)
+        SubBtn.BackgroundColor3 = Theme.Sidebar
+        SubBtn.BorderSizePixel = 1
+        SubBtn.BorderColor3 = Theme.Border
+        SubBtn.ClipsDescendants = true
+        SubBtn.Text = ""
+        SubBtn.AutoButtonColor = false
+        SubBtn.Parent = SubTabItemFrame
+
+        -- Left Active Indicator Bar inside SubBtn
+        local ActiveIndicator = Instance.new("Frame")
+        ActiveIndicator.Name = "ActiveIndicator"
+        ActiveIndicator.Size = UDim2.new(0, 2, 1, 0)
+        ActiveIndicator.Position = UDim2.new(0, 0, 0, 0)
+        ActiveIndicator.BackgroundColor3 = Theme.WhiteLine
+        ActiveIndicator.BorderSizePixel = 0
+        ActiveIndicator.BackgroundTransparency = 1
+        ActiveIndicator.Parent = SubBtn
+
+        -- SubTab Text Label
+        local SubLabel = Instance.new("TextLabel")
+        SubLabel.Name = "SubLabel"
+        SubLabel.Size = UDim2.new(1, -12, 1, 0)
+        SubLabel.Position = UDim2.new(0, 12, 0, 0)
+        SubLabel.BackgroundTransparency = 1
+        SubLabel.Text = subTabName
+        SubLabel.Font = Enum.Font.GothamMedium
+        SubLabel.TextSize = 12
+        SubLabel.TextColor3 = Theme.TextMuted
+        SubLabel.TextXAlignment = Enum.TextXAlignment.Left
+        SubLabel.Parent = SubBtn
+
+        -- Content Page Frame
+        local PageFrame = Instance.new("ScrollingFrame")
+        PageFrame.Name = "Page_" .. categoryName .. "_" .. subTabName
+        PageFrame.Size = UDim2.new(1, 0, 1, 0)
+        PageFrame.BackgroundTransparency = 1
+        PageFrame.BorderSizePixel = 0
+        PageFrame.Visible = false
+        PageFrame.ScrollBarThickness = 3
+        PageFrame.ScrollBarImageColor3 = Theme.WhiteLine
+        PageFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+        PageFrame.Parent = Library.PageContainer
+
+        local PageList = Instance.new("UIListLayout")
+        PageList.SortOrder = Enum.SortOrder.LayoutOrder
+        PageList.Padding = UDim.new(0, 10)
+        PageList.Parent = PageFrame
+
+        local PagePadding = Instance.new("UIPadding")
+        PagePadding.PaddingLeft = UDim.new(0, 20)
+        PagePadding.PaddingRight = UDim.new(0, 20)
+        PagePadding.PaddingTop = UDim.new(0, 15)
+        PagePadding.PaddingBottom = UDim.new(0, 15)
+        PagePadding.Parent = PageFrame
+
+        PageList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            PageFrame.CanvasSize = UDim2.new(0, 0, 0, PageList.AbsoluteContentSize.Y + 30)
+        end)
+
+        SubBtn.MouseButton1Click:Connect(function()
+            Library:SelectSubTab(SubTab)
+        end)
+
+        SubBtn.MouseEnter:Connect(function()
+            if Library.ActiveSubTab ~= SubTab then
+                Tween(SubBtn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.CardHover, BorderColor3 = Theme.Border})
+                Tween(SubLabel, TweenInfo.new(0.15), {TextColor3 = Theme.TextMain})
+            end
+        end)
+
+        SubBtn.MouseLeave:Connect(function()
+            if Library.ActiveSubTab ~= SubTab then
+                Tween(SubBtn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.Sidebar, BorderColor3 = Theme.Border})
+                Tween(SubLabel, TweenInfo.new(0.15), {TextColor3 = Theme.TextMuted})
+            end
+        end)
+
+        SubTab.SubBtn = SubBtn
+        SubTab.SubLabel = SubLabel
+        SubTab.ActiveIndicator = ActiveIndicator
+        SubTab.PageFrame = PageFrame
+
+        table.insert(Category.SubTabs, SubTab)
+        table.insert(Library.AllSubTabs, SubTab)
+
+        if not isBottom then
+            Category.UpdateTreeLines()
+        end
+
+        if not Library.ActiveSubTab then
+            Library:SelectSubTab(SubTab)
+        end
+
+        return SubTab
+    end
+
+    function Category:GetDirectPage()
+        if not Category.DirectSubTab then
+            Category.DirectSubTab = Category:CreateSubTab(categoryName)
+            HeaderBtn.Visible = false
+        end
+        return Category.DirectSubTab
+    end
+
+    return Category
+end
+
+-- Select Active SubTab
+function WorldGUI:SelectSubTab(targetSubTab)
+    self.ActiveSubTab = targetSubTab
+    
+    if targetSubTab.Category and targetSubTab.Category.Name ~= targetSubTab.Name then
+        self.HeaderTitle.Text = targetSubTab.Category.Name .. "  /  " .. targetSubTab.Name
+    else
+        self.HeaderTitle.Text = targetSubTab.Name
+    end
+
+    for _, sub in ipairs(self.AllSubTabs) do
+        if sub == targetSubTab then
+            sub.PageFrame.Visible = true
+            -- Whole button box fills cleanly with Theme.Card background and crisp white border on ALL 4 SIDES!
+            Tween(sub.SubBtn, TweenInfo.new(0.2), {
+                BackgroundColor3 = Theme.Card,
+                BorderColor3 = Theme.WhiteLine
+            })
+            Tween(sub.SubLabel, TweenInfo.new(0.2), {TextColor3 = Theme.TextMain})
+            Tween(sub.ActiveIndicator, TweenInfo.new(0.2), {BackgroundTransparency = 0})
+        else
+            sub.PageFrame.Visible = false
+            Tween(sub.SubBtn, TweenInfo.new(0.2), {
+                BackgroundColor3 = Theme.Sidebar,
+                BorderColor3 = Theme.Border
+            })
+            Tween(sub.SubLabel, TweenInfo.new(0.2), {TextColor3 = Theme.TextMuted})
+            Tween(sub.ActiveIndicator, TweenInfo.new(0.2), {BackgroundTransparency = 1})
+        end
+    end
+end
+
+---------------------------------------------------------
+-- FEATURE COMPONENTS
+---------------------------------------------------------
+
+-- 1. Section Header
+function WorldGUI:CreateSection(subTab, title)
+    local SectionFrame = Instance.new("Frame")
+    SectionFrame.Name = "Section_" .. title
+    SectionFrame.Size = UDim2.new(1, 0, 0, 26)
+    SectionFrame.BackgroundTransparency = 1
+    SectionFrame.Parent = subTab.PageFrame
+
+    local SectionTitle = Instance.new("TextLabel")
+    SectionTitle.Size = UDim2.new(1, 0, 1, 0)
+    SectionTitle.BackgroundTransparency = 1
+    SectionTitle.Text = string.upper(title)
+    SectionTitle.Font = Enum.Font.GothamBold
+    SectionTitle.TextSize = 11
+    SectionTitle.TextColor3 = Theme.WhiteLine
+    SectionTitle.TextXAlignment = Enum.TextXAlignment.Left
+    SectionTitle.Parent = SectionFrame
+
+    local SectionLine = Instance.new("Frame")
+    SectionLine.Size = UDim2.new(1, 0, 0, 1)
+    SectionLine.Position = UDim2.new(0, 0, 1, -2)
+    SectionLine.BackgroundColor3 = Theme.Border
+    SectionLine.BorderSizePixel = 0
+    SectionLine.Parent = SectionFrame
+end
+
+-- 2. Action Button
+function WorldGUI:CreateButton(subTab, text, callback)
+    callback = callback or function() end
+
+    local BtnFrame = Instance.new("Frame")
+    BtnFrame.Name = "Button_" .. text
+    BtnFrame.Size = UDim2.new(1, 0, 0, 40)
+    BtnFrame.BackgroundColor3 = Theme.Card
+    BtnFrame.BorderColor3 = Theme.Border
+    BtnFrame.BorderSizePixel = 1
+    BtnFrame.Parent = subTab.PageFrame
+
+    local Button = Instance.new("TextButton")
+    Button.Size = UDim2.new(1, 0, 1, 0)
+    Button.BackgroundTransparency = 1
+    Button.Text = text
+    Button.Font = Enum.Font.GothamMedium
+    Button.TextSize = 13
+    Button.TextColor3 = Theme.TextMain
+    Button.Parent = BtnFrame
+
+    Button.MouseEnter:Connect(function()
+        Tween(BtnFrame, TweenInfo.new(0.15), {BackgroundColor3 = Theme.CardHover, BorderColor3 = Theme.WhiteLine})
+    end)
+    Button.MouseLeave:Connect(function()
+        Tween(BtnFrame, TweenInfo.new(0.15), {BackgroundColor3 = Theme.Card, BorderColor3 = Theme.Border})
+    end)
+    Button.MouseButton1Down:Connect(function()
+        Tween(BtnFrame, TweenInfo.new(0.08), {BackgroundColor3 = Theme.WhiteLine})
+        Tween(Button, TweenInfo.new(0.08), {TextColor3 = Theme.Background})
+    end)
+    Button.MouseButton1Up:Connect(function()
+        Tween(BtnFrame, TweenInfo.new(0.15), {BackgroundColor3 = Theme.CardHover})
+        Tween(Button, TweenInfo.new(0.15), {TextColor3 = Theme.TextMain})
+        callback()
+    end)
+end
+
+-- 3. Toggle Switch
+function WorldGUI:CreateToggle(subTab, text, defaultState, callback)
+    callback = callback or function() end
+    local state = defaultState or false
+
+    local ToggleFrame = Instance.new("Frame")
+    ToggleFrame.Name = "Toggle_" .. text
+    ToggleFrame.Size = UDim2.new(1, 0, 0, 42)
+    ToggleFrame.BackgroundColor3 = Theme.Card
+    ToggleFrame.BorderColor3 = Theme.Border
+    ToggleFrame.BorderSizePixel = 1
+    ToggleFrame.Parent = subTab.PageFrame
+
+    local ToggleLabel = Instance.new("TextLabel")
+    ToggleLabel.Size = UDim2.new(1, -70, 1, 0)
+    ToggleLabel.Position = UDim2.new(0, 15, 0, 0)
+    ToggleLabel.BackgroundTransparency = 1
+    ToggleLabel.Text = text
+    ToggleLabel.Font = Enum.Font.GothamMedium
+    ToggleLabel.TextSize = 13
+    ToggleLabel.TextColor3 = Theme.TextMain
+    ToggleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    ToggleLabel.Parent = ToggleFrame
+
+    local SwitchTrack = Instance.new("Frame")
+    SwitchTrack.Name = "SwitchTrack"
+    SwitchTrack.Size = UDim2.new(0, 42, 0, 20)
+    SwitchTrack.Position = UDim2.new(1, -55, 0.5, -10)
+    SwitchTrack.BackgroundColor3 = state and Theme.Success or Theme.ToggleOff
+    SwitchTrack.BorderColor3 = state and Theme.WhiteLine or Theme.Border
+    SwitchTrack.BorderSizePixel = 1
+    SwitchTrack.Parent = ToggleFrame
+
+    local SwitchKnob = Instance.new("Frame")
+    SwitchKnob.Name = "SwitchKnob"
+    SwitchKnob.Size = UDim2.new(0, 14, 0, 14)
+    SwitchKnob.Position = state and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
+    SwitchKnob.BackgroundColor3 = state and Theme.Background or Theme.WhiteLineMuted
+    SwitchKnob.BorderSizePixel = 0
+    SwitchKnob.Parent = SwitchTrack
+
+    local ClickBtn = Instance.new("TextButton")
+    ClickBtn.Size = UDim2.new(1, 0, 1, 0)
+    ClickBtn.BackgroundTransparency = 1
+    ClickBtn.Text = ""
+    ClickBtn.Parent = ToggleFrame
+
+    local function UpdateToggle()
+        if state then
+            Tween(SwitchTrack, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Success, BorderColor3 = Theme.WhiteLine})
+            Tween(SwitchKnob, TweenInfo.new(0.2), {Position = UDim2.new(1, -17, 0.5, -7), BackgroundColor3 = Theme.Background})
+        else
+            Tween(SwitchTrack, TweenInfo.new(0.2), {BackgroundColor3 = Theme.ToggleOff, BorderColor3 = Theme.Border})
+            Tween(SwitchKnob, TweenInfo.new(0.2), {Position = UDim2.new(0, 3, 0.5, -7), BackgroundColor3 = Theme.WhiteLineMuted})
+        end
+        callback(state)
+    end
+
+    ClickBtn.MouseButton1Click:Connect(function()
+        state = not state
+        UpdateToggle()
+    end)
+
+    ToggleFrame.MouseEnter:Connect(function()
+        Tween(ToggleFrame, TweenInfo.new(0.15), {BackgroundColor3 = Theme.CardHover})
+    end)
+    ToggleFrame.MouseLeave:Connect(function()
+        Tween(ToggleFrame, TweenInfo.new(0.15), {BackgroundColor3 = Theme.Card})
+    end)
+end
+
+-- 4. Interactive Slider
+function WorldGUI:CreateSlider(subTab, text, min, max, defaultVal, callback)
+    callback = callback or function() end
+    local value = math.clamp(defaultVal or min, min, max)
+
+    local SliderFrame = Instance.new("Frame")
+    SliderFrame.Name = "Slider_" .. text
+    SliderFrame.Size = UDim2.new(1, 0, 0, 52)
+    SliderFrame.BackgroundColor3 = Theme.Card
+    SliderFrame.BorderColor3 = Theme.Border
+    SliderFrame.BorderSizePixel = 1
+    SliderFrame.Parent = subTab.PageFrame
+
+    local SliderLabel = Instance.new("TextLabel")
+    SliderLabel.Size = UDim2.new(0.7, 0, 0, 24)
+    SliderLabel.Position = UDim2.new(0, 15, 0, 4)
+    SliderLabel.BackgroundTransparency = 1
+    SliderLabel.Text = text
+    SliderLabel.Font = Enum.Font.GothamMedium
+    SliderLabel.TextSize = 13
+    SliderLabel.TextColor3 = Theme.TextMain
+    SliderLabel.TextXAlignment = Enum.TextXAlignment.Left
+    SliderLabel.Parent = SliderFrame
+
+    local ValueLabel = Instance.new("TextLabel")
+    ValueLabel.Size = UDim2.new(0.3, -15, 0, 24)
+    ValueLabel.Position = UDim2.new(0.7, 0, 0, 4)
+    ValueLabel.BackgroundTransparency = 1
+    ValueLabel.Text = tostring(value)
+    ValueLabel.Font = Enum.Font.GothamBold
+    ValueLabel.TextSize = 12
+    ValueLabel.TextColor3 = Theme.WhiteLine
+    ValueLabel.TextXAlignment = Enum.TextXAlignment.Right
+    ValueLabel.Parent = SliderFrame
+
+    local Track = Instance.new("Frame")
+    Track.Name = "Track"
+    Track.Size = UDim2.new(1, -30, 0, 8)
+    Track.Position = UDim2.new(0, 15, 0, 32)
+    Track.BackgroundColor3 = Theme.ToggleOff
+    Track.BorderColor3 = Theme.Border
+    Track.BorderSizePixel = 1
+    Track.Parent = SliderFrame
+
+    local Fill = Instance.new("Frame")
+    Fill.Name = "Fill"
+    Fill.Size = UDim2.new((value - min) / (max - min), 0, 1, 0)
+    Fill.BackgroundColor3 = Theme.WhiteLine
+    Fill.BorderSizePixel = 0
+    Fill.Parent = Track
+
+    local Sliding = false
+
+    local function SetValue(inputVal)
+        local percentage = math.clamp((inputVal.Position.X - Track.AbsolutePosition.X) / Track.AbsoluteSize.X, 0, 1)
+        value = math.floor(min + (max - min) * percentage)
+        ValueLabel.Text = tostring(value)
+        Fill.Size = UDim2.new(percentage, 0, 1, 0)
+        callback(value)
+    end
+
+    Track.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            Sliding = true
+            SetValue(input)
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            Sliding = false
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if Sliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            SetValue(input)
+        end
+    end)
+end
+
+-- 5. Keybind Selector
+function WorldGUI:CreateKeybind(subTab, text, defaultKey, callback)
+    callback = callback or function() end
+    local currentKey = defaultKey or Enum.KeyCode.E
+
+    local BindFrame = Instance.new("Frame")
+    BindFrame.Name = "Keybind_" .. text
+    BindFrame.Size = UDim2.new(1, 0, 0, 42)
+    BindFrame.BackgroundColor3 = Theme.Card
+    BindFrame.BorderColor3 = Theme.Border
+    BindFrame.BorderSizePixel = 1
+    BindFrame.Parent = subTab.PageFrame
+
+    local BindLabel = Instance.new("TextLabel")
+    BindLabel.Size = UDim2.new(0.6, 0, 1, 0)
+    BindLabel.Position = UDim2.new(0, 15, 0, 0)
+    BindLabel.BackgroundTransparency = 1
+    BindLabel.Text = text
+    BindLabel.Font = Enum.Font.GothamMedium
+    BindLabel.TextSize = 13
+    BindLabel.TextColor3 = Theme.TextMain
+    BindLabel.TextXAlignment = Enum.TextXAlignment.Left
+    BindLabel.Parent = BindFrame
+
+    local BindBtn = Instance.new("TextButton")
+    BindBtn.Size = UDim2.new(0.3, -15, 0, 26)
+    BindBtn.Position = UDim2.new(0.7, 0, 0.5, -13)
+    BindBtn.BackgroundColor3 = Theme.Background
+    BindBtn.BorderColor3 = Theme.Border
+    BindBtn.BorderSizePixel = 1
+    BindBtn.Text = currentKey.Name
+    BindBtn.Font = Enum.Font.GothamBold
+    BindBtn.TextSize = 12
+    BindBtn.TextColor3 = Theme.WhiteLine
+    BindBtn.Parent = BindFrame
+
+    local Binding = false
+
+    BindBtn.MouseButton1Click:Connect(function()
+        Binding = true
+        BindBtn.Text = "..."
+        BindBtn.BorderColor3 = Theme.WhiteLine
+    end)
+
+    UserInputService.InputBegan:Connect(function(input, processed)
+        if Binding and not processed and input.UserInputType == Enum.UserInputType.Keyboard then
+            currentKey = input.KeyCode
+            BindBtn.Text = currentKey.Name
+            BindBtn.BorderColor3 = Theme.Border
+            Binding = false
+            callback(currentKey)
+        end
+    end)
+end
+
+---------------------------------------------------------
+-- INITIALIZATION MENU BUILDER
+---------------------------------------------------------
+
+local Window = WorldGUI.new("World")
+
+-- 1. VISUALS CATEGORY (enemy, npc, other)
+local VisualsCat = Window:CreateCategory("Visuals")
+
+local EnemyTab = VisualsCat:CreateSubTab("enemy")
+Window:CreateSection(EnemyTab, "Enemy ESP")
+Window:CreateToggle(EnemyTab, "Enemy Box ESP", true, function(state)
+    print("[WorldGUI] Enemy Box ESP:", state)
+end)
+Window:CreateToggle(EnemyTab, "Enemy Tracers", true, function(state)
+    print("[WorldGUI] Enemy Tracers:", state)
+end)
+Window:CreateSlider(EnemyTab, "Render Distance", 100, 5000, 1500, function(val)
+    print("[WorldGUI] Render Distance:", val)
+end)
+
+local NPCTab = VisualsCat:CreateSubTab("npc")
+Window:CreateSection(NPCTab, "NPC ESP")
+Window:CreateToggle(NPCTab, "NPC Box ESP", false, function(state)
+    print("[WorldGUI] NPC Box ESP:", state)
+end)
+Window:CreateToggle(NPCTab, "NPC Name Tags", true, function(state)
+    print("[WorldGUI] NPC Name Tags:", state)
+end)
+
+local OtherTab = VisualsCat:CreateSubTab("other")
+Window:CreateSection(OtherTab, "World Visuals")
+Window:CreateToggle(OtherTab, "Item ESP", true, function(state)
+    print("[WorldGUI] Item ESP:", state)
+end)
+Window:CreateToggle(OtherTab, "Fullbright Mode", false, function(state)
+    print("[WorldGUI] Fullbright:", state)
+end)
+
+-- 2. AIMBOT CATEGORY (aimbot, silent aim)
+local AimbotCat = Window:CreateCategory("Aimbot")
+
+local MainAimTab = AimbotCat:CreateSubTab("aimbot")
+Window:CreateSection(MainAimTab, "Regular Aimbot")
+Window:CreateToggle(MainAimTab, "Enable Aimbot", true, function(state)
+    print("[WorldGUI] Enable Aimbot:", state)
+end)
+Window:CreateSlider(MainAimTab, "Aim Smoothness", 1, 20, 5, function(val)
+    print("[WorldGUI] Smoothness:", val)
+end)
+
+local SilentAimTab = AimbotCat:CreateSubTab("silent aim")
+Window:CreateSection(SilentAimTab, "Silent Aim Features")
+Window:CreateToggle(SilentAimTab, "Enable Silent Aim", true, function(state)
+    print("[WorldGUI] Silent Aim:", state)
+end)
+Window:CreateSlider(SilentAimTab, "Hit Chance (%)", 1, 100, 100, function(val)
+    print("[WorldGUI] Hit Chance:", val)
+end)
+
+-- 3. SETTINGS CATEGORY (SEPARATED AT BOTTOM)
+local SettingsCat = Window:CreateCategory("Settings", true) -- true = Bottom placement
+local SettingsTab = SettingsCat:GetDirectPage()
+
+Window:CreateSection(SettingsTab, "Menu Configuration")
+Window:CreateButton(SettingsTab, "Unload GUI", function()
+    Window:Toggle(false)
+    Window.ScreenGui:Destroy()
+end)
+
+print("[WORLD GUI] Successfully Loaded! Choose Mobile or PC on the popup modal.")
