@@ -1,20 +1,18 @@
 --[[
     ===================================================================
-    ⚡ WORLD GUI - Staggered Dropdown & Clean Collapse Fade Fix
+    ⚡ WORLD GUI - Complete Self-Executing Script
     ===================================================================
     - On Execution: Small Modal Popup centered on screen:
         - WORLD centered at top
         - Full crisp white accent line divider
         - Two Big Choice Buttons: [ MOBILE ]  [ PC ]
-    - Picking "PC": Hides the floating mobile button on the left.
-    - Picking "MOBILE": Keeps the floating mobile button on the left.
+    - Visuals expands 100% to display enemy, npc, and other cleanly!
+    - Clean 'L' branch connector on the last item (other).
+    - ACCORDION MODE: Clicking "Aimbot" automatically collapses "Visuals" 
+      so sub-tabs NEVER overlap or get cut off!
     - Toggle Key: Right Shift (Enum.KeyCode.RightShift)
-    - Tree Branch Layout (Starts closed by default on launch)
     - STAGGERED CASCADING ANIMATION: Sub-tabs drop down sequentially 
-      (enemy -> npc -> other) with smooth slide & fade effects!
-    - FIXED: Active white indicator bar fades out smoothly during collapse 
-      (Zero lingering white dots or floating line artifacts!)
-    - 100% Unclipped 4-Sided White Rectangular Highlights
+      with smooth slide & fade effects!
     ===================================================================
 --]]
 
@@ -73,6 +71,8 @@ local function CreateAccentLine(parent, position, size)
 end
 
 function WorldGUI.new(titleText)
+    print("[WorldGUI Debug] Initializing UI instance: " .. tostring(titleText))
+
     local self = setmetatable({}, WorldGUI)
     
     self.Title = titleText or "World"
@@ -244,7 +244,7 @@ function WorldGUI.new(titleText)
     MainFrame.Parent = ScreenGui
     self.MainFrame = MainFrame
 
-    -- Automatic Resolution Scaling
+    -- Dynamic Resolution & Compact Mobile Scaling System
     local UIScale = Instance.new("UIScale")
     UIScale.Parent = MainFrame
     self.UIScale = UIScale
@@ -253,14 +253,23 @@ function WorldGUI.new(titleText)
         local camera = workspace.CurrentCamera
         if camera then
             local viewportSize = camera.ViewportSize
-            if viewportSize.X < 700 or viewportSize.Y < 500 then
-                local scale = math.min(viewportSize.X / 720, viewportSize.Y / 480)
-                UIScale.Scale = math.clamp(scale, 0.65, 1)
+            local targetScale = 1
+
+            -- Mobile Mode Scaling (Sized to ~0.52-0.65 for compact fitting on phone screens!)
+            if self.DeviceMode == "Mobile" or UserInputService.TouchEnabled or viewportSize.Y < 480 or viewportSize.X < 720 then
+                local scaleX = (viewportSize.X * 0.72) / 680
+                local scaleY = (viewportSize.Y * 0.70) / 440
+                targetScale = math.clamp(math.min(scaleX, scaleY), 0.52, 0.65)
             else
-                UIScale.Scale = 1
+                local scaleX = (viewportSize.X * 0.88) / 680
+                local scaleY = (viewportSize.Y * 0.88) / 440
+                targetScale = math.clamp(math.min(scaleX, scaleY), 0.65, 1)
             end
+
+            UIScale.Scale = targetScale
         end
     end
+    self.UpdateScale = UpdateScale
     UpdateScale()
     if workspace.CurrentCamera then
         workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(UpdateScale)
@@ -296,7 +305,7 @@ function WorldGUI.new(titleText)
     -- Logo Container (Top Left)
     local LogoContainer = Instance.new("Frame")
     LogoContainer.Name = "LogoContainer"
-    LogoContainer.Size = UDim2.new(1, 0, 0, 58)
+    LogoContainer.Size = UDim2.new(1, 0, 0, 52)
     LogoContainer.BackgroundTransparency = 1
     LogoContainer.Parent = Sidebar
 
@@ -308,7 +317,7 @@ function WorldGUI.new(titleText)
     LogoGlow.BackgroundTransparency = 1
     LogoGlow.Text = self.Title
     LogoGlow.Font = Enum.Font.GothamBlack
-    LogoGlow.TextSize = 24
+    LogoGlow.TextSize = 22
     LogoGlow.TextColor3 = Theme.WhiteLine
     LogoGlow.TextTransparency = 0.4
     LogoGlow.TextXAlignment = Enum.TextXAlignment.Left
@@ -322,47 +331,47 @@ function WorldGUI.new(titleText)
     LogoText.BackgroundTransparency = 1
     LogoText.Text = self.Title
     LogoText.Font = Enum.Font.GothamBlack
-    LogoText.TextSize = 24
+    LogoText.TextSize = 22
     LogoText.TextColor3 = Theme.TextMain
     LogoText.TextXAlignment = Enum.TextXAlignment.Left
     LogoText.Parent = LogoContainer
 
     -- MATCHING LINE #1: Below World Logo
-    CreateAccentLine(Sidebar, UDim2.new(0, 15, 0, 58), UDim2.new(1, -30, 0, 1))
+    CreateAccentLine(Sidebar, UDim2.new(0, 15, 0, 52), UDim2.new(1, -30, 0, 1))
 
-    -- Main Categories Scrolling Container
+    -- Main Categories Scrolling Container (Dynamically sized above bottom settings tab!)
     local TabHolder = Instance.new("ScrollingFrame")
     TabHolder.Name = "TabHolder"
-    TabHolder.Size = UDim2.new(1, 0, 1, -120)
-    TabHolder.Position = UDim2.new(0, 0, 0, 64)
+    TabHolder.Size = UDim2.new(1, 0, 1, -104)
+    TabHolder.Position = UDim2.new(0, 0, 0, 56)
     TabHolder.BackgroundTransparency = 1
     TabHolder.BorderSizePixel = 0
-    TabHolder.ScrollBarThickness = 3
+    TabHolder.ScrollBarThickness = 2
     TabHolder.ScrollBarImageColor3 = Theme.Border
     TabHolder.CanvasSize = UDim2.new(0, 0, 0, 0)
     TabHolder.Parent = Sidebar
 
     local SidebarListLayout = Instance.new("UIListLayout")
     SidebarListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    SidebarListLayout.Padding = UDim.new(0, 6)
+    SidebarListLayout.Padding = UDim.new(0, 5)
     SidebarListLayout.Parent = TabHolder
 
     local SidebarPadding = Instance.new("UIPadding")
     SidebarPadding.PaddingLeft = UDim.new(0, 10)
     SidebarPadding.PaddingRight = UDim.new(0, 10)
-    SidebarPadding.PaddingTop = UDim.new(0, 6)
-    SidebarPadding.PaddingBottom = UDim.new(0, 6)
+    SidebarPadding.PaddingTop = UDim.new(0, 4)
+    SidebarPadding.PaddingBottom = UDim.new(0, 4)
     SidebarPadding.Parent = TabHolder
 
     SidebarListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        TabHolder.CanvasSize = UDim2.new(0, 0, 0, SidebarListLayout.AbsoluteContentSize.Y + 20)
+        TabHolder.CanvasSize = UDim2.new(0, 0, 0, SidebarListLayout.AbsoluteContentSize.Y + 12)
     end)
 
     -- Bottom Separated Container for Settings
     local BottomSidebarContainer = Instance.new("Frame")
     BottomSidebarContainer.Name = "BottomSidebarContainer"
-    BottomSidebarContainer.Size = UDim2.new(1, -20, 0, 46)
-    BottomSidebarContainer.Position = UDim2.new(0, 10, 1, -50)
+    BottomSidebarContainer.Size = UDim2.new(1, -20, 0, 42)
+    BottomSidebarContainer.Position = UDim2.new(0, 10, 1, -46)
     BottomSidebarContainer.BackgroundTransparency = 1
     BottomSidebarContainer.Parent = Sidebar
 
@@ -385,7 +394,7 @@ function WorldGUI.new(titleText)
     -- Header Bar
     local HeaderBar = Instance.new("Frame")
     HeaderBar.Name = "HeaderBar"
-    HeaderBar.Size = UDim2.new(1, 0, 0, 48)
+    HeaderBar.Size = UDim2.new(1, 0, 0, 44)
     HeaderBar.BackgroundColor3 = Theme.Header
     HeaderBar.BorderSizePixel = 0
     HeaderBar.Parent = ContentArea
@@ -405,7 +414,7 @@ function WorldGUI.new(titleText)
     HeaderTitle.BackgroundTransparency = 1
     HeaderTitle.Text = "Dashboard"
     HeaderTitle.Font = Enum.Font.GothamBold
-    HeaderTitle.TextSize = 15
+    HeaderTitle.TextSize = 14
     HeaderTitle.TextColor3 = Theme.TextMain
     HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
     HeaderTitle.Parent = HeaderBar
@@ -414,8 +423,8 @@ function WorldGUI.new(titleText)
     -- Page Container for SubTab views
     local PageContainer = Instance.new("Frame")
     PageContainer.Name = "PageContainer"
-    PageContainer.Size = UDim2.new(1, 0, 1, -48)
-    PageContainer.Position = UDim2.new(0, 0, 0, 48)
+    PageContainer.Size = UDim2.new(1, 0, 1, -44)
+    PageContainer.Position = UDim2.new(0, 0, 0, 44)
     PageContainer.BackgroundTransparency = 1
     PageContainer.Parent = ContentArea
     self.PageContainer = PageContainer
@@ -445,6 +454,7 @@ function WorldGUI.new(titleText)
     -- Handle Modal Selections (PC vs Mobile)
     local function SelectDeviceMode(mode)
         self.DeviceMode = mode
+        self:UpdateScale()
         
         Tween(ModalFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             Position = UDim2.new(0.5, -190, 0.5, -85)
@@ -554,7 +564,7 @@ function WorldGUI:Toggle(state)
 end
 
 ---------------------------------------------------------
--- TREE BRANCH DROPDOWN SYSTEM (CLEAN COLLAPSE FADE)
+-- TREE BRANCH DROPDOWN SYSTEM (EXACT MATCH PICTURE 2)
 ---------------------------------------------------------
 
 function WorldGUI:CreateCategory(categoryName, isBottom)
@@ -572,21 +582,21 @@ function WorldGUI:CreateCategory(categoryName, isBottom)
     -- Wrapper Frame for Category Header + SubTabs Tree
     local CategoryWrapper = Instance.new("Frame")
     CategoryWrapper.Name = "Category_" .. categoryName
-    CategoryWrapper.Size = UDim2.new(1, 0, 0, isBottom and 40 or 34)
+    CategoryWrapper.Size = UDim2.new(1, 0, 0, isBottom and 36 or 30)
     CategoryWrapper.AutomaticSize = Enum.AutomaticSize.Y
     CategoryWrapper.BackgroundTransparency = 1
-    CategoryWrapper.Position = isBottom and UDim2.new(0, 0, 0, 8) or UDim2.new(0, 0, 0, 0)
+    CategoryWrapper.Position = isBottom and UDim2.new(0, 0, 0, 4) or UDim2.new(0, 0, 0, 0)
     CategoryWrapper.Parent = parentContainer
 
     local WrapperLayout = Instance.new("UIListLayout")
     WrapperLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    WrapperLayout.Padding = UDim.new(0, 4)
+    WrapperLayout.Padding = UDim.new(0, 3)
     WrapperLayout.Parent = CategoryWrapper
 
     -- Category Main Header Button
     local HeaderBtn = Instance.new("TextButton")
     HeaderBtn.Name = "00_HeaderBtn"
-    HeaderBtn.Size = UDim2.new(1, -2, 0, 32)
+    HeaderBtn.Size = UDim2.new(1, -2, 0, 28)
     HeaderBtn.Position = UDim2.new(0, 0, 0, 0)
     HeaderBtn.BackgroundColor3 = Theme.Sidebar
     HeaderBtn.BorderSizePixel = 1
@@ -598,11 +608,11 @@ function WorldGUI:CreateCategory(categoryName, isBottom)
     local HeaderLabel = Instance.new("TextLabel")
     HeaderLabel.Name = "HeaderLabel"
     HeaderLabel.Size = UDim2.new(1, -10, 1, 0)
-    HeaderLabel.Position = UDim2.new(0, 12, 0, 0)
+    HeaderLabel.Position = UDim2.new(0, 10, 0, 0)
     HeaderLabel.BackgroundTransparency = 1
     HeaderLabel.Text = categoryName
     HeaderLabel.Font = Enum.Font.GothamBold
-    HeaderLabel.TextSize = 13
+    HeaderLabel.TextSize = 12
     HeaderLabel.TextColor3 = Theme.TextMain
     HeaderLabel.TextXAlignment = Enum.TextXAlignment.Left
     HeaderLabel.Parent = HeaderBtn
@@ -633,7 +643,7 @@ function WorldGUI:CreateCategory(categoryName, isBottom)
     SubLayout.Padding = UDim.new(0, 5)
     SubLayout.Parent = SubListFrame
 
-    -- Update Vertical Line Segments so the LAST subtab vertical line stops at center (50%)
+    -- Update Vertical Line Segments so the LAST subtab vertical line stops at center (50%) - Forms 'L' shape exactly like Picture 2!
     local function UpdateTreeLines()
         local count = #Category.SubTabs
         for i, sub in ipairs(Category.SubTabs) do
@@ -647,20 +657,20 @@ function WorldGUI:CreateCategory(categoryName, isBottom)
         end
     end
 
-    -- STAGGERED CASCADING DROPDOWN ANIMATION (WITH CLEAN ACTIVE INDICATOR FADE)
+    -- STAGGERED CASCADING DROPDOWN ANIMATION (EXACT DIRECT CALCULATION FOR 100% VISIBILITY)
     local function AnimateDropdown()
-        local targetHeight = SubLayout.AbsoluteContentSize.Y + 10
+        local count = #Category.SubTabs
+        -- Each item is 26px + 5px spacing + 12px padding = 31px per item
+        local targetHeight = (count * 31) + 6
 
         if Category.Expanded then
-            -- 1. Expand SubHolder container height smoothly
-            Tween(SubHolder, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Tween(SubHolder, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
                 Size = UDim2.new(1, 0, 0, targetHeight)
             })
             Tween(HeaderBtn, TweenInfo.new(0.15), {BorderColor3 = Theme.WhiteLine})
 
-            -- 2. Staggered Cascading Animation (Each subtab drops down & fades in one after another!)
             for i, sub in ipairs(Category.SubTabs) do
-                sub.SubTabItemFrame.Position = UDim2.new(0, 0, 0, -10)
+                sub.SubTabItemFrame.Position = UDim2.new(0, 0, 0, -8)
                 sub.SubBtn.BackgroundTransparency = 1
                 sub.SubLabel.TextTransparency = 1
                 if sub.ActiveIndicator and Library.ActiveSubTab == sub then
@@ -669,54 +679,51 @@ function WorldGUI:CreateCategory(categoryName, isBottom)
                 if sub.VerticalBranch then sub.VerticalBranch.BackgroundTransparency = 1 end
                 if sub.HorizontalBranch then sub.HorizontalBranch.BackgroundTransparency = 1 end
 
-                task.delay((i - 1) * 0.07, function()
+                task.delay((i - 1) * 0.06, function()
                     if Category.Expanded then
-                        Tween(sub.SubTabItemFrame, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                        Tween(sub.SubTabItemFrame, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
                             Position = UDim2.new(0, 0, 0, 0)
                         })
-                        Tween(sub.SubBtn, TweenInfo.new(0.2), {
+                        Tween(sub.SubBtn, TweenInfo.new(0.18), {
                             BackgroundTransparency = 0
                         })
-                        Tween(sub.SubLabel, TweenInfo.new(0.2), {
+                        Tween(sub.SubLabel, TweenInfo.new(0.18), {
                             TextTransparency = 0
                         })
                         if sub.ActiveIndicator and Library.ActiveSubTab == sub then
-                            Tween(sub.ActiveIndicator, TweenInfo.new(0.2), {BackgroundTransparency = 0})
+                            Tween(sub.ActiveIndicator, TweenInfo.new(0.18), {BackgroundTransparency = 0})
                         end
                         if sub.VerticalBranch then
-                            Tween(sub.VerticalBranch, TweenInfo.new(0.2), {BackgroundTransparency = 0})
+                            Tween(sub.VerticalBranch, TweenInfo.new(0.18), {BackgroundTransparency = 0})
                         end
                         if sub.HorizontalBranch then
-                            Tween(sub.HorizontalBranch, TweenInfo.new(0.2), {BackgroundTransparency = 0})
+                            Tween(sub.HorizontalBranch, TweenInfo.new(0.18), {BackgroundTransparency = 0})
                         end
                     end
                 end)
             end
         else
-            -- Reverse Staggered Collapse (Fades out ActiveIndicator so no residual lines stick out!)
-            local count = #Category.SubTabs
             for i, sub in ipairs(Category.SubTabs) do
                 local reverseIndex = count - i
-                task.delay(reverseIndex * 0.04, function()
+                task.delay(reverseIndex * 0.03, function()
                     if not Category.Expanded then
-                        Tween(sub.SubTabItemFrame, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                        Tween(sub.SubTabItemFrame, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
                             Position = UDim2.new(0, 0, 0, -6)
                         })
-                        Tween(sub.SubBtn, TweenInfo.new(0.12), {BackgroundTransparency = 1})
-                        Tween(sub.SubLabel, TweenInfo.new(0.12), {TextTransparency = 1})
+                        Tween(sub.SubBtn, TweenInfo.new(0.1), {BackgroundTransparency = 1})
+                        Tween(sub.SubLabel, TweenInfo.new(0.1), {TextTransparency = 1})
                         if sub.ActiveIndicator then
-                            Tween(sub.ActiveIndicator, TweenInfo.new(0.12), {BackgroundTransparency = 1})
+                            Tween(sub.ActiveIndicator, TweenInfo.new(0.1), {BackgroundTransparency = 1})
                         end
-                        if sub.VerticalBranch then Tween(sub.VerticalBranch, TweenInfo.new(0.12), {BackgroundTransparency = 1}) end
-                        if sub.HorizontalBranch then Tween(sub.HorizontalBranch, TweenInfo.new(0.12), {BackgroundTransparency = 1}) end
+                        if sub.VerticalBranch then Tween(sub.VerticalBranch, TweenInfo.new(0.1), {BackgroundTransparency = 1}) end
+                        if sub.HorizontalBranch then Tween(sub.HorizontalBranch, TweenInfo.new(0.1), {BackgroundTransparency = 1}) end
                     end
                 end)
             end
 
-            -- Collapse SubHolder container after reverse stagger finishes
-            task.delay(count * 0.04 + 0.04, function()
+            task.delay(count * 0.03 + 0.03, function()
                 if not Category.Expanded then
-                    Tween(SubHolder, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                    Tween(SubHolder, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
                         Size = UDim2.new(1, 0, 0, 0)
                     })
                     Tween(HeaderBtn, TweenInfo.new(0.15), {BorderColor3 = Theme.Border})
@@ -724,15 +731,20 @@ function WorldGUI:CreateCategory(categoryName, isBottom)
             end)
         end
     end
-
-    SubLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        if Category.Expanded then
-            SubHolder.Size = UDim2.new(1, 0, 0, SubLayout.AbsoluteContentSize.Y + 10)
-        end
-    end)
+    Category.AnimateDropdown = AnimateDropdown
 
     HeaderBtn.MouseButton1Click:Connect(function()
         if #Category.SubTabs > 0 then
+            -- ACCORDION MODE: Close all other open categories when opening a new one!
+            if not Category.Expanded then
+                for _, otherCat in ipairs(Library.Categories) do
+                    if otherCat ~= Category and otherCat.Expanded and not otherCat.IsBottom then
+                        otherCat.Expanded = false
+                        otherCat.AnimateDropdown()
+                    end
+                end
+            end
+
             Category.Expanded = not Category.Expanded
             AnimateDropdown()
         elseif Category.DirectSubTab then
@@ -755,7 +767,7 @@ function WorldGUI:CreateCategory(categoryName, isBottom)
         -- Item Frame containing Vertical Trunk Segment + Horizontal Connector + Sub-Button
         local SubTabItemFrame = Instance.new("Frame")
         SubTabItemFrame.Name = "SubTabFrame_" .. subTabName
-        SubTabItemFrame.Size = UDim2.new(1, 0, 0, 30)
+        SubTabItemFrame.Size = UDim2.new(1, 0, 0, 26) -- 26px Height
         SubTabItemFrame.BackgroundTransparency = 1
         SubTabItemFrame.ClipsDescendants = true
         SubTabItemFrame.Parent = isBottom and CategoryWrapper or SubListFrame
@@ -785,10 +797,10 @@ function WorldGUI:CreateCategory(categoryName, isBottom)
             SubTab.HorizontalBranch = HorizontalBranch
         end
 
-        -- SubTab Button Frame (Padded 2px Top/Bottom & Right so ALL 4 WHITE BORDER LINES ARE 100% VISIBLE!)
+        -- SubTab Button Frame
         local SubBtn = Instance.new("TextButton")
         SubBtn.Name = "SubBtn"
-        SubBtn.Size = isBottom and UDim2.new(1, -2, 0, 32) or UDim2.new(1, -26, 1, -4)
+        SubBtn.Size = isBottom and UDim2.new(1, -2, 0, 28) or UDim2.new(1, -26, 1, -4)
         SubBtn.Position = isBottom and UDim2.new(0, 0, 0, 0) or UDim2.new(0, 24, 0, 2)
         SubBtn.BackgroundColor3 = Theme.Sidebar
         SubBtn.BorderSizePixel = 1
@@ -812,7 +824,7 @@ function WorldGUI:CreateCategory(categoryName, isBottom)
         local SubLabel = Instance.new("TextLabel")
         SubLabel.Name = "SubLabel"
         SubLabel.Size = UDim2.new(1, -12, 1, 0)
-        SubLabel.Position = UDim2.new(0, 12, 0, 0)
+        SubLabel.Position = UDim2.new(0, 10, 0, 0)
         SubLabel.BackgroundTransparency = 1
         SubLabel.Text = subTabName
         SubLabel.Font = Enum.Font.GothamMedium
@@ -910,7 +922,6 @@ function WorldGUI:SelectSubTab(targetSubTab)
     for _, sub in ipairs(self.AllSubTabs) do
         if sub == targetSubTab then
             sub.PageFrame.Visible = true
-            -- Whole button box fills cleanly with Theme.Card background and crisp white border on ALL 4 SIDES!
             Tween(sub.SubBtn, TweenInfo.new(0.2), {
                 BackgroundColor3 = Theme.Card,
                 BorderColor3 = Theme.WhiteLine
@@ -952,7 +963,7 @@ function WorldGUI:CreateSection(subTab, title)
     SectionTitle.Parent = SectionFrame
 
     local SectionLine = Instance.new("Frame")
-    SectionLine.Size = UDim2.new(1, 0, 0, 1)
+    SectionLine.Size = UDim2.new(0, 0, 0, 1)
     SectionLine.Position = UDim2.new(0, 0, 1, -2)
     SectionLine.BackgroundColor3 = Theme.Border
     SectionLine.BorderSizePixel = 0
@@ -1205,7 +1216,7 @@ function WorldGUI:CreateKeybind(subTab, text, defaultKey, callback)
 end
 
 ---------------------------------------------------------
--- INITIALIZATION MENU BUILDER
+-- INITIALIZATION MENU BUILDER (RUNS AUTOMATICALLY)
 ---------------------------------------------------------
 
 local Window = WorldGUI.new("World")
