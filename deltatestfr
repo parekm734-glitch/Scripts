@@ -1,5 +1,5 @@
 --[[
-    Kernel.cc - 1:1 LUAU GUI LIBRARY & BULLETPROOF ESP ENGINE (PROJECT DELTA READY)
+    Kernel.cc - 1:1 LUAU GUI LIBRARY & BULLETPROOF ESP ENGINE (PROJECT DELTA + AI / NPC ESP SUPPORT)
     Fully functional, PC & Mobile friendly, all executors supported (Solara, Wave, Delta, Codex, Hydrogen, Xeno, etc.)
 --]]
 
@@ -14,6 +14,7 @@ local Camera = workspace.CurrentCamera
 -- Global Connections & State Container for Clean Unloading
 local Connections = {}
 local ESP_Cache = {}
+local AI_Cache = {}
 local IsUnloaded = false
 
 -- Detect and Destroy Any Pre-existing GUI Instances Before Execution
@@ -101,18 +102,29 @@ local Colors = {
 local MainFont = Enum.Font.Code
 
 ---------------------------------------------------------
--- ESP ENGINE & STATE CONTROLLER (PROJECT DELTA SUPPORT)
+-- ESP ENGINE & STATE CONTROLLER (PLAYERS & PROJECT DELTA AI / NPCS)
 ---------------------------------------------------------
 
 local ESP_State = {
+    -- Player ESP
     Box = true,
     Skeleton = true,
     HP = true,
     Distance = true,
-    BoxColor = Color3.fromRGB(255, 255, 255), -- White Default (crisp white)
+    BoxColor = Color3.fromRGB(255, 255, 255), -- White Default
     SkeletonColor = Color3.fromRGB(255, 0, 127), -- Pink Default
     HPColor = Color3.fromRGB(0, 255, 127),
-    DistanceColor = Color3.fromRGB(255, 255, 255)
+    DistanceColor = Color3.fromRGB(255, 255, 255),
+
+    -- AI / NPC ESP
+    AI_Box = true,
+    AI_Skeleton = true,
+    AI_HP = true,
+    AI_Distance = true,
+    AI_BoxColor = Color3.fromRGB(0, 229, 255), -- Cyan Default for AI
+    AI_SkeletonColor = Color3.fromRGB(235, 120, 20), -- Orange Default for AI
+    AI_HPColor = Color3.fromRGB(0, 255, 127),
+    AI_DistanceColor = Color3.fromRGB(255, 255, 255)
 }
 
 -- Hide All Drawing Elements Safely
@@ -131,9 +143,10 @@ local function HideAllStorageDrawings(storage)
     if storage.Highlight then storage.Highlight.Enabled = false end
 end
 
-local function RemoveESP(player)
-    if ESP_Cache[player] then
-        local storage = ESP_Cache[player]
+local function RemoveESP(key, cacheTable)
+    cacheTable = cacheTable or ESP_Cache
+    if cacheTable[key] then
+        local storage = cacheTable[key]
         HideAllStorageDrawings(storage)
 
         for _, obj in pairs(storage) do
@@ -151,37 +164,31 @@ local function RemoveESP(player)
                 end
             end
         end
-        ESP_Cache[player] = nil
+        cacheTable[key] = nil
     end
 end
 
 -- Drawing API or Fallback Instance Creation
 local HasDrawing = (Drawing ~= nil and Drawing.new ~= nil)
 
-local function CreateESPForPlayer(player)
-    if IsUnloaded or player == LocalPlayer then return end
-    RemoveESP(player)
-
+local function CreateDrawings(isAI)
     local storage = {}
 
     if HasDrawing then
-        -- Box Outer Shadow (Black)
         local boxOutline = Drawing.new("Square")
-        boxOutline.Thickness = 3
+        boxOutline.Thickness = 2
         boxOutline.Filled = false
         boxOutline.Color = Color3.fromRGB(0, 0, 0)
         boxOutline.Visible = false
         storage.BoxOutline = boxOutline
 
-        -- 2D Box (White Default)
         local box = Drawing.new("Square")
         box.Thickness = 1
         box.Filled = false
-        box.Color = ESP_State.BoxColor
+        box.Color = isAI and ESP_State.AI_BoxColor or ESP_State.BoxColor
         box.Visible = false
         storage.Box = box
 
-        -- HP Bar Background
         local hpBg = Drawing.new("Square")
         hpBg.Thickness = 1
         hpBg.Filled = true
@@ -189,40 +196,36 @@ local function CreateESPForPlayer(player)
         hpBg.Visible = false
         storage.HpBg = hpBg
 
-        -- HP Bar Fill
         local hpFill = Drawing.new("Square")
         hpFill.Thickness = 1
         hpFill.Filled = true
-        hpFill.Color = ESP_State.HPColor
+        hpFill.Color = isAI and ESP_State.AI_HPColor or ESP_State.HPColor
         hpFill.Visible = false
         storage.HpFill = hpFill
 
-        -- Distance Text
         local distTxt = Drawing.new("Text")
         distTxt.Size = 13
         distTxt.Center = true
         distTxt.Outline = true
-        distTxt.Color = ESP_State.DistanceColor
+        distTxt.Color = isAI and ESP_State.AI_DistanceColor or ESP_State.DistanceColor
         distTxt.Visible = false
         storage.DistTxt = distTxt
 
-        -- Skeleton Lines (16 Joint connections)
         storage.SkeletonLines = {}
         for i = 1, 16 do
             local line = Drawing.new("Line")
             line.Thickness = 1.5
-            line.Color = ESP_State.SkeletonColor
+            line.Color = isAI and ESP_State.AI_SkeletonColor or ESP_State.SkeletonColor
             line.Visible = false
             table.insert(storage.SkeletonLines, line)
         end
     else
-        -- Instance-based Billboard & Highlight Fallback
         local highlight = Instance.new("Highlight")
         highlight.Name = "KernelHighlight"
         highlight.FillTransparency = 0.6
         highlight.OutlineTransparency = 0
-        highlight.OutlineColor = ESP_State.BoxColor
-        highlight.FillColor = ESP_State.BoxColor
+        highlight.OutlineColor = isAI and ESP_State.AI_BoxColor or ESP_State.BoxColor
+        highlight.FillColor = isAI and ESP_State.AI_BoxColor or ESP_State.BoxColor
         highlight.Enabled = false
         storage.Highlight = highlight
 
@@ -235,7 +238,7 @@ local function CreateESPForPlayer(player)
         local txt = Instance.new("TextLabel")
         txt.Size = UDim2.new(1, 0, 1, 0)
         txt.BackgroundTransparency = 1
-        txt.TextColor3 = ESP_State.DistanceColor
+        txt.TextColor3 = isAI and ESP_State.AI_DistanceColor or ESP_State.DistanceColor
         txt.Font = MainFont
         txt.TextSize = 12
         txt.TextStrokeTransparency = 0
@@ -245,10 +248,22 @@ local function CreateESPForPlayer(player)
         storage.TextLabel = txt
     end
 
-    ESP_Cache[player] = storage
+    return storage
 end
 
--- Helper to find body part by multiple names (R15, R6, Project Delta Rigs)
+local function CreateESPForPlayer(player)
+    if IsUnloaded or player == LocalPlayer then return end
+    RemoveESP(player, ESP_Cache)
+    ESP_Cache[player] = CreateDrawings(false)
+end
+
+local function CreateESPForAI(npcModel)
+    if IsUnloaded or not npcModel then return end
+    RemoveESP(npcModel, AI_Cache)
+    AI_Cache[npcModel] = CreateDrawings(true)
+end
+
+-- Helper to find body part by multiple names
 local function FindPart(char, ...)
     for _, name in ipairs({...}) do
         local part = char:FindFirstChild(name)
@@ -257,185 +272,270 @@ local function FindPart(char, ...)
     return nil
 end
 
--- Render Loop for Real-time ESP Updating (Protected with pcall to prevent ghost drawings)
+-- Universal Render Function for both Players and AI Models (Fixes 500+ Stud Shrinking Block Issue)
+local function RenderESPForTarget(targetName, char, storage, isEnabledBox, isEnabledSkel, isEnabledHP, isEnabledDist, boxColor, skelColor, hpColor, distColor)
+    if not char or not char.Parent or not char:IsDescendantOf(workspace) then
+        HideAllStorageDrawings(storage)
+        return
+    end
+
+    local hrp = FindPart(char, "HumanoidRootPart", "Torso", "UpperTorso", "Head")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+
+    if not hrp or not hum or hum.Health <= 0 then
+        HideAllStorageDrawings(storage)
+        return
+    end
+
+    local hrpPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+
+    -- Ensure target is actually in front of the camera (Z > 0 and onScreen)
+    if not onScreen or hrpPos.Z <= 0 then
+        HideAllStorageDrawings(storage)
+        return
+    end
+
+    local head = FindPart(char, "Head")
+    local headPos = head and Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 1.35, 0)) or Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 3.5, 0))
+    local legPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3.2, 0))
+
+    if headPos.Z <= 0 or legPos.Z <= 0 then
+        HideAllStorageDrawings(storage)
+        return
+    end
+
+    -- Calculate Raw 2D Screen Dimensions
+    local rawHeight = math.abs(headPos.Y - legPos.Y)
+    local rawWidth = rawHeight / 1.55
+
+    -- FIX FOR 500+ STUDS SHRINKING BLOCK ISSUE:
+    -- Enforce minimum readable dimensions so far-away targets stay clean, intact 2D boxes instead of collapsing into tiny solid blocks!
+    local minHeight = 18
+    local minWidth = 12
+    local renderHeight = math.max(rawHeight, minHeight)
+    local renderWidth = math.max(rawWidth, minWidth)
+
+    if HasDrawing then
+        -- Update 2D Box
+        if isEnabledBox and storage.Box and storage.BoxOutline then
+            storage.BoxOutline.Size = Vector2.new(renderWidth + 2, renderHeight + 2)
+            storage.BoxOutline.Position = Vector2.new(hrpPos.X - renderWidth/2 - 1, headPos.Y - 1)
+            storage.BoxOutline.Visible = true
+
+            storage.Box.Size = Vector2.new(renderWidth, renderHeight)
+            storage.Box.Position = Vector2.new(hrpPos.X - renderWidth/2, headPos.Y)
+            storage.Box.Color = boxColor
+            storage.Box.Visible = true
+        else
+            if storage.Box then storage.Box.Visible = false end
+            if storage.BoxOutline then storage.BoxOutline.Visible = false end
+        end
+
+        -- Update HP Bar
+        if isEnabledHP and storage.HpFill and storage.HpBg then
+            local hpPercent = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+            local hpHeight = renderHeight * hpPercent
+
+            storage.HpBg.Size = Vector2.new(3, renderHeight + 2)
+            storage.HpBg.Position = Vector2.new(hrpPos.X - renderWidth/2 - 6, headPos.Y - 1)
+            storage.HpBg.Visible = true
+
+            storage.HpFill.Size = Vector2.new(1, hpHeight)
+            storage.HpFill.Position = Vector2.new(hrpPos.X - renderWidth/2 - 5, headPos.Y + (renderHeight - hpHeight))
+            storage.HpFill.Color = Color3.fromRGB(255 * (1 - hpPercent), 255 * hpPercent, 50)
+            storage.HpFill.Visible = true
+        else
+            if storage.HpBg then storage.HpBg.Visible = false end
+            if storage.HpFill then storage.HpFill.Visible = false end
+        end
+
+        -- Update Distance Text
+        if isEnabledDist and storage.DistTxt and LocalPlayer.Character then
+            local myHRP = FindPart(LocalPlayer.Character, "HumanoidRootPart", "Torso")
+            if myHRP then
+                local dist = math.floor((myHRP.Position - hrp.Position).Magnitude)
+                storage.DistTxt.Text = string.format("%s [%dm]", targetName, dist)
+                storage.DistTxt.Position = Vector2.new(hrpPos.X, headPos.Y + renderHeight + 4)
+                storage.DistTxt.Color = distColor
+                storage.DistTxt.Visible = true
+            end
+        else
+            if storage.DistTxt then storage.DistTxt.Visible = false end
+        end
+
+        -- Update Full Skeleton
+        if isEnabledSkel and storage.SkeletonLines then
+            local function DrawBoneLine(lineIndex, part1, part2)
+                local line = storage.SkeletonLines[lineIndex]
+                if line and part1 and part2 then
+                    local v1, os1 = Camera:WorldToViewportPoint(part1.Position)
+                    local v2, os2 = Camera:WorldToViewportPoint(part2.Position)
+                    if os1 and os2 and v1.Z > 0 and v2.Z > 0 then
+                        line.From = Vector2.new(v1.X, v1.Y)
+                        line.To = Vector2.new(v2.X, v2.Y)
+                        line.Color = skelColor
+                        line.Visible = true
+                        return
+                    end
+                end
+                if line then line.Visible = false end
+            end
+
+            local pHead = FindPart(char, "Head")
+            local pUpperTorso = FindPart(char, "UpperTorso", "Torso")
+            local pLowerTorso = FindPart(char, "LowerTorso", "HumanoidRootPart", "Torso")
+
+            local pLeftUpperArm = FindPart(char, "LeftUpperArm", "LeftArm", "Left Arm")
+            local pLeftLowerArm = FindPart(char, "LeftLowerArm", "LeftArm", "Left Arm")
+            local pLeftHand = FindPart(char, "LeftHand", "LeftLowerArm", "LeftArm")
+
+            local pRightUpperArm = FindPart(char, "RightUpperArm", "RightArm", "Right Arm")
+            local pRightLowerArm = FindPart(char, "RightLowerArm", "RightArm", "Right Arm")
+            local pRightHand = FindPart(char, "RightHand", "RightLowerArm", "RightArm")
+
+            local pLeftUpperLeg = FindPart(char, "LeftUpperLeg", "LeftLeg", "Left Leg")
+            local pLeftLowerLeg = FindPart(char, "LeftLowerLeg", "LeftLeg", "Left Leg")
+            local pLeftFoot = FindPart(char, "LeftFoot", "LeftLowerLeg", "LeftLeg")
+
+            local pRightUpperLeg = FindPart(char, "RightUpperLeg", "RightLeg", "Right Leg")
+            local pRightLowerLeg = FindPart(char, "RightLowerLeg", "RightLeg", "Right Leg")
+            local pRightFoot = FindPart(char, "RightFoot", "RightLowerLeg", "RightLeg")
+
+            DrawBoneLine(1, pHead, pUpperTorso)
+            DrawBoneLine(2, pUpperTorso, pLowerTorso)
+
+            DrawBoneLine(3, pUpperTorso, pLeftUpperArm)
+            DrawBoneLine(4, pLeftUpperArm, pLeftLowerArm)
+            DrawBoneLine(5, pLeftLowerArm, pLeftHand)
+
+            DrawBoneLine(6, pUpperTorso, pRightUpperArm)
+            DrawBoneLine(7, pRightUpperArm, pRightLowerArm)
+            DrawBoneLine(8, pRightLowerArm, pRightHand)
+
+            DrawBoneLine(9, pLowerTorso, pLeftUpperLeg)
+            DrawBoneLine(10, pLeftUpperLeg, pLeftLowerLeg)
+            DrawBoneLine(11, pLeftLowerLeg, pLeftFoot)
+
+            DrawBoneLine(12, pLowerTorso, pRightUpperLeg)
+            DrawBoneLine(13, pRightUpperLeg, pRightLowerLeg)
+            DrawBoneLine(14, pRightLowerLeg, pRightFoot)
+        else
+            if storage.SkeletonLines then
+                for _, l in ipairs(storage.SkeletonLines) do l.Visible = false end
+            end
+        end
+    else
+        -- Instance Fallback
+        if storage.Highlight then
+            storage.Highlight.Parent = char
+            storage.Highlight.Enabled = isEnabledBox
+            storage.Highlight.OutlineColor = boxColor
+        end
+        if storage.Billboard then
+            storage.Billboard.Parent = char
+            if storage.TextLabel and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local myHRP = FindPart(LocalPlayer.Character, "HumanoidRootPart", "Torso")
+                local dist = myHRP and math.floor((myHRP.Position - hrp.Position).Magnitude) or 0
+                storage.TextLabel.Text = string.format("%s | HP: %d | [%dm]", targetName, math.floor(hum.Health), dist)
+                storage.TextLabel.TextColor3 = distColor
+            end
+        end
+    end
+end
+
+-- Render Loop for Real-time ESP Updating
 table.insert(Connections, RunService.RenderStepped:Connect(function()
     if IsUnloaded then return end
     Camera = workspace.CurrentCamera
     if not Camera then return end
 
-    -- Active Cache Iteration with Auto-Cleanup for Despawned / Left Players
+    -- 1. Render Players ESP
     for player, storage in pairs(ESP_Cache) do
         pcall(function()
-            -- Verify Player & Character Existence
             if not player or not player.Parent or not player:IsDescendantOf(Players) then
-                RemoveESP(player)
+                RemoveESP(player, ESP_Cache)
                 return
             end
+            RenderESPForTarget(
+                player.Name,
+                player.Character,
+                storage,
+                ESP_State.Box,
+                ESP_State.Skeleton,
+                ESP_State.HP,
+                ESP_State.Distance,
+                ESP_State.BoxColor,
+                ESP_State.SkeletonColor,
+                ESP_State.HPColor,
+                ESP_State.DistanceColor
+            )
+        end)
+    end
 
-            local char = player.Character
-            if not char or not char.Parent or not char:IsDescendantOf(workspace) then
-                HideAllStorageDrawings(storage)
+    -- 2. Render AI / NPC ESP (Project Delta Scavs, Raiders, Bosses, Bots)
+    for npcModel, storage in pairs(AI_Cache) do
+        pcall(function()
+            if not npcModel or not npcModel.Parent or not npcModel:IsDescendantOf(workspace) then
+                RemoveESP(npcModel, AI_Cache)
                 return
             end
-
-            local hrp = FindPart(char, "HumanoidRootPart", "Torso", "UpperTorso")
-            local hum = char:FindFirstChildOfClass("Humanoid")
-
-            if not hrp or not hum or hum.Health <= 0 then
-                HideAllStorageDrawings(storage)
-                return
+            local aiName = npcModel.Name
+            if aiName == "Model" or aiName == "Character" or aiName == "NPC" then
+                aiName = "AI Bot"
             end
-
-            local hrpPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-
-            -- Ensure character is actually in front of the camera (Z > 0 and onScreen)
-            if not onScreen or hrpPos.Z <= 0 then
-                HideAllStorageDrawings(storage)
-                return
-            end
-
-            local head = FindPart(char, "Head")
-            local headPos = head and Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 1.35, 0)) or Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 3.5, 0))
-            local legPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3.2, 0))
-
-            if headPos.Z <= 0 or legPos.Z <= 0 then
-                HideAllStorageDrawings(storage)
-                return
-            end
-
-            local height = math.abs(headPos.Y - legPos.Y)
-            local width = height / 1.55
-
-            if HasDrawing then
-                -- Update 2D Box (White Fill + Black Background Outline)
-                if ESP_State.Box and storage.Box and storage.BoxOutline then
-                    storage.BoxOutline.Size = Vector2.new(width + 2, height + 2)
-                    storage.BoxOutline.Position = Vector2.new(hrpPos.X - width/2 - 1, headPos.Y - 1)
-                    storage.BoxOutline.Visible = true
-
-                    storage.Box.Size = Vector2.new(width, height)
-                    storage.Box.Position = Vector2.new(hrpPos.X - width/2, headPos.Y)
-                    storage.Box.Color = ESP_State.BoxColor
-                    storage.Box.Visible = true
-                else
-                    if storage.Box then storage.Box.Visible = false end
-                    if storage.BoxOutline then storage.BoxOutline.Visible = false end
-                end
-
-                -- Update HP Bar
-                if ESP_State.HP and storage.HpFill and storage.HpBg then
-                    local hpPercent = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
-                    local hpHeight = height * hpPercent
-
-                    storage.HpBg.Size = Vector2.new(3, height + 2)
-                    storage.HpBg.Position = Vector2.new(hrpPos.X - width/2 - 6, headPos.Y - 1)
-                    storage.HpBg.Visible = true
-
-                    storage.HpFill.Size = Vector2.new(1, hpHeight)
-                    storage.HpFill.Position = Vector2.new(hrpPos.X - width/2 - 5, headPos.Y + (height - hpHeight))
-                    storage.HpFill.Color = Color3.fromRGB(255 * (1 - hpPercent), 255 * hpPercent, 50)
-                    storage.HpFill.Visible = true
-                else
-                    if storage.HpBg then storage.HpBg.Visible = false end
-                    if storage.HpFill then storage.HpFill.Visible = false end
-                end
-
-                -- Update Distance Text
-                if ESP_State.Distance and storage.DistTxt and LocalPlayer.Character then
-                    local myHRP = FindPart(LocalPlayer.Character, "HumanoidRootPart", "Torso")
-                    if myHRP then
-                        local dist = math.floor((myHRP.Position - hrp.Position).Magnitude)
-                        storage.DistTxt.Text = string.format("%s [%dm]", player.Name, dist)
-                        storage.DistTxt.Position = Vector2.new(hrpPos.X, headPos.Y + height + 4)
-                        storage.DistTxt.Color = ESP_State.DistanceColor
-                        storage.DistTxt.Visible = true
-                    end
-                else
-                    if storage.DistTxt then storage.DistTxt.Visible = false end
-                end
-
-                -- Update Full Skeleton
-                if ESP_State.Skeleton and storage.SkeletonLines then
-                    local function DrawBoneLine(lineIndex, part1, part2)
-                        local line = storage.SkeletonLines[lineIndex]
-                        if line and part1 and part2 then
-                            local v1, os1 = Camera:WorldToViewportPoint(part1.Position)
-                            local v2, os2 = Camera:WorldToViewportPoint(part2.Position)
-                            if os1 and os2 and v1.Z > 0 and v2.Z > 0 then
-                                line.From = Vector2.new(v1.X, v1.Y)
-                                line.To = Vector2.new(v2.X, v2.Y)
-                                line.Color = ESP_State.SkeletonColor
-                                line.Visible = true
-                                return
-                            end
-                        end
-                        if line then line.Visible = false end
-                    end
-
-                    local pHead = FindPart(char, "Head")
-                    local pUpperTorso = FindPart(char, "UpperTorso", "Torso")
-                    local pLowerTorso = FindPart(char, "LowerTorso", "HumanoidRootPart", "Torso")
-
-                    local pLeftUpperArm = FindPart(char, "LeftUpperArm", "LeftArm", "Left Arm")
-                    local pLeftLowerArm = FindPart(char, "LeftLowerArm", "LeftArm", "Left Arm")
-                    local pLeftHand = FindPart(char, "LeftHand", "LeftLowerArm", "LeftArm")
-
-                    local pRightUpperArm = FindPart(char, "RightUpperArm", "RightArm", "Right Arm")
-                    local pRightLowerArm = FindPart(char, "RightLowerArm", "RightArm", "Right Arm")
-                    local pRightHand = FindPart(char, "RightHand", "RightLowerArm", "RightArm")
-
-                    local pLeftUpperLeg = FindPart(char, "LeftUpperLeg", "LeftLeg", "Left Leg")
-                    local pLeftLowerLeg = FindPart(char, "LeftLowerLeg", "LeftLeg", "Left Leg")
-                    local pLeftFoot = FindPart(char, "LeftFoot", "LeftLowerLeg", "LeftLeg")
-
-                    local pRightUpperLeg = FindPart(char, "RightUpperLeg", "RightLeg", "Right Leg")
-                    local pRightLowerLeg = FindPart(char, "RightLowerLeg", "RightLeg", "Right Leg")
-                    local pRightFoot = FindPart(char, "RightFoot", "RightLowerLeg", "RightLeg")
-
-                    DrawBoneLine(1, pHead, pUpperTorso)
-                    DrawBoneLine(2, pUpperTorso, pLowerTorso)
-
-                    DrawBoneLine(3, pUpperTorso, pLeftUpperArm)
-                    DrawBoneLine(4, pLeftUpperArm, pLeftLowerArm)
-                    DrawBoneLine(5, pLeftLowerArm, pLeftHand)
-
-                    DrawBoneLine(6, pUpperTorso, pRightUpperArm)
-                    DrawBoneLine(7, pRightUpperArm, pRightLowerArm)
-                    DrawBoneLine(8, pRightLowerArm, pRightHand)
-
-                    DrawBoneLine(9, pLowerTorso, pLeftUpperLeg)
-                    DrawBoneLine(10, pLeftUpperLeg, pLeftLowerLeg)
-                    DrawBoneLine(11, pLeftLowerLeg, pLeftFoot)
-
-                    DrawBoneLine(12, pLowerTorso, pRightUpperLeg)
-                    DrawBoneLine(13, pRightUpperLeg, pRightLowerLeg)
-                    DrawBoneLine(14, pRightLowerLeg, pRightFoot)
-                else
-                    if storage.SkeletonLines then
-                        for _, l in ipairs(storage.SkeletonLines) do l.Visible = false end
-                    end
-                end
-            else
-                -- Instance Fallback
-                if storage.Highlight then
-                    storage.Highlight.Parent = char
-                    storage.Highlight.Enabled = ESP_State.Box
-                    storage.Highlight.OutlineColor = ESP_State.BoxColor
-                end
-                if storage.Billboard then
-                    storage.Billboard.Parent = char
-                    if storage.TextLabel and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                        local dist = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude)
-                        storage.TextLabel.Text = string.format("%s | HP: %d | [%dm]", player.Name, math.floor(hum.Health), dist)
-                        storage.TextLabel.TextColor3 = ESP_State.DistanceColor
-                    end
-                end
-            end
+            RenderESPForTarget(
+                aiName,
+                npcModel,
+                storage,
+                ESP_State.AI_Box,
+                ESP_State.AI_Skeleton,
+                ESP_State.AI_HP,
+                ESP_State.AI_Distance,
+                ESP_State.AI_BoxColor,
+                ESP_State.AI_SkeletonColor,
+                ESP_State.AI_HPColor,
+                ESP_State.AI_DistanceColor
+            )
         end)
     end
 end))
 
--- Track Active Players & Auto Refresh Every 3 Seconds
+-- Helper Function to Scan and Register Project Delta AI / NPCs
+local function ScanForNPCs()
+    if IsUnloaded then return end
+
+    local potentialContainers = {
+        workspace,
+        workspace:FindFirstChild("NPCs"),
+        workspace:FindFirstChild("Bots"),
+        workspace:FindFirstChild("AI"),
+        workspace:FindFirstChild("Entities"),
+        workspace:FindFirstChild("Scavs"),
+        workspace:FindFirstChild("Bandits"),
+        workspace:FindFirstChild("Monsters")
+    }
+
+    for _, container in ipairs(potentialContainers) do
+        if container then
+            for _, obj in ipairs(container:GetChildren()) do
+                if obj:IsA("Model") and obj ~= LocalPlayer.Character then
+                    -- Verify it's an NPC (Has Humanoid + HRP, but NOT owned by a player)
+                    local hum = obj:FindFirstChildOfClass("Humanoid")
+                    local hrp = FindPart(obj, "HumanoidRootPart", "Torso", "UpperTorso", "Head")
+                    local isPlayerChar = Players:GetPlayerFromCharacter(obj) ~= nil
+
+                    if hum and hrp and not isPlayerChar then
+                        if not AI_Cache[obj] then
+                            CreateESPForAI(obj)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Track Active Players
 for _, player in ipairs(Players:GetPlayers()) do
     CreateESPForPlayer(player)
     table.insert(Connections, player.CharacterAdded:Connect(function()
@@ -453,14 +553,19 @@ table.insert(Connections, Players.PlayerAdded:Connect(function(player)
 end))
 
 table.insert(Connections, Players.PlayerRemoving:Connect(function(player)
-    RemoveESP(player)
+    RemoveESP(player, ESP_Cache)
 end))
 
--- Background Auto-Refresh Task (Runs every 3 seconds for new/respawned players)
+-- Initial NPC Scan
+ScanForNPCs()
+
+-- Background Auto-Refresh Task (Runs every 3 seconds for new/respawned players and NPCs)
 task.spawn(function()
     while not IsUnloaded do
         task.wait(3)
         if IsUnloaded then break end
+
+        -- Scan Players
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= LocalPlayer then
                 if not ESP_Cache[player] or not player.Character or not player.Character.Parent then
@@ -468,6 +573,9 @@ task.spawn(function()
                 end
             end
         end
+
+        -- Scan Project Delta AI & NPCs
+        ScanForNPCs()
     end
 end)
 
@@ -977,10 +1085,16 @@ local function AddToggleRow(parent, labelText, defaultChecked, colorSwatches, ca
         swatch.MouseButton1Click:Connect(function()
             OpenColorPicker(swatch.BackgroundColor3, function(newColor)
                 swatch.BackgroundColor3 = newColor
+                -- Player Swatches
                 if labelText == "Show Enemy Box" then ESP_State.BoxColor = newColor end
                 if labelText == "Show Enemy Skeleton" then ESP_State.SkeletonColor = newColor end
                 if labelText == "Show Enemy HP" then ESP_State.HPColor = newColor end
                 if labelText == "Show Enemy Distance" then ESP_State.DistanceColor = newColor end
+                -- AI / NPC Swatches
+                if labelText == "Show AI Box" then ESP_State.AI_BoxColor = newColor end
+                if labelText == "Show AI Skeleton" then ESP_State.AI_SkeletonColor = newColor end
+                if labelText == "Show AI HP" then ESP_State.AI_HPColor = newColor end
+                if labelText == "Show AI Distance" then ESP_State.AI_DistanceColor = newColor end
             end)
         end)
     end
@@ -1137,7 +1251,7 @@ end
 local function PopulateVisualsEnemy()
     ClearPanels()
 
-    -- Defaults: White Box, Pink Skeleton, Green HP, White Distance
+    -- Enemy Players Toggles
     AddToggleRow(LeftScroll, "Show Enemy Box", ESP_State.Box, {ESP_State.BoxColor}, function(val)
         ESP_State.Box = val
     end)
@@ -1157,9 +1271,23 @@ end
 
 local function PopulateVisualsAI()
     ClearPanels()
-    AddToggleRow(LeftScroll, "Show NPCs", true, {Colors.WhiteSwatch})
-    AddToggleRow(LeftScroll, "Show Sleepers", true, {})
-    AddToggleRow(LeftScroll, "Show AI Health", true, {})
+
+    -- AI / NPC / Boss Toggles for Project Delta
+    AddToggleRow(LeftScroll, "Show AI Box", ESP_State.AI_Box, {ESP_State.AI_BoxColor}, function(val)
+        ESP_State.AI_Box = val
+    end)
+
+    AddToggleRow(LeftScroll, "Show AI Skeleton", ESP_State.AI_Skeleton, {ESP_State.AI_SkeletonColor}, function(val)
+        ESP_State.AI_Skeleton = val
+    end)
+
+    AddToggleRow(LeftScroll, "Show AI HP", ESP_State.AI_HP, {ESP_State.AI_HPColor}, function(val)
+        ESP_State.AI_HP = val
+    end)
+
+    AddToggleRow(LeftScroll, "Show AI Distance", ESP_State.AI_Distance, {ESP_State.AI_DistanceColor}, function(val)
+        ESP_State.AI_Distance = val
+    end)
 end
 
 local function PopulateVisualsWorld()
@@ -1187,9 +1315,14 @@ local function UnloadScript()
 
     -- Clean up all ESP Drawings and Instances
     for player, _ in pairs(ESP_Cache) do
-        RemoveESP(player)
+        RemoveESP(player, ESP_Cache)
     end
     ESP_Cache = {}
+
+    for npc, _ in pairs(AI_Cache) do
+        RemoveESP(npc, AI_Cache)
+    end
+    AI_Cache = {}
 
     -- Destroy UI
     pcall(function() ScreenGui:Destroy() end)
@@ -1299,4 +1432,4 @@ end
 -- Initialize Default Active Tab (Visuals)
 RefreshSubTabs(ActiveTopTab)
 
-print("[Kernel.cc] Project Delta Ready - Full ESP & 2D RGB Color Palette Initialized!")
+print("[Kernel.cc] Project Delta Ready - AI/NPC ESP & Far Distance Fix Initialized!")
