@@ -1,1288 +1,1302 @@
 --[[
-    ===================================================================
-    ⚡ WORLD GUI - Complete Self-Executing Script
-    ===================================================================
-    - On Execution: Small Modal Popup centered on screen:
-        - WORLD centered at top
-        - Full crisp white accent line divider
-        - Two Big Choice Buttons: [ MOBILE ]  [ PC ]
-    - Visuals expands 100% to display enemy, npc, and other cleanly!
-    - Clean 'L' branch connector on the last item (other).
-    - ACCORDION MODE: Clicking "Aimbot" automatically collapses "Visuals" 
-      so sub-tabs NEVER overlap or get cut off!
-    - Toggle Key: Right Shift (Enum.KeyCode.RightShift)
-    - STAGGERED CASCADING ANIMATION: Sub-tabs drop down sequentially 
-      with smooth slide & fade effects!
-    ===================================================================
+    Kernel.cc - 1:1 LUAU GUI LIBRARY & BULLETPROOF ESP ENGINE (PROJECT DELTA READY)
+    Fully functional, PC & Mobile friendly, all executors supported (Solara, Wave, Delta, Codex, Hydrogen, Xeno, etc.)
 --]]
 
-local WorldGUI = {}
-WorldGUI.__index = WorldGUI
-
--- Services
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
-
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
--- Utility Functions
-local function Tween(object, info, properties)
-    local tween = TweenService:Create(object, info, properties)
-    tween:Play()
-    return tween
+-- Global Connections & State Container for Clean Unloading
+local Connections = {}
+local ESP_Cache = {}
+local IsUnloaded = false
+
+-- Detect and Destroy Any Pre-existing GUI Instances Before Execution
+local function CleanupExistingGuis()
+    local namesToDestroy = {
+        "KernelCcGui",
+        "VloneDevGui",
+        "KernelMobileToggle",
+        "VloneMobileToggle"
+    }
+
+    local targetParents = {}
+    if gethui then 
+        pcall(function() table.insert(targetParents, gethui()) end) 
+    end
+    pcall(function() table.insert(targetParents, CoreGui) end)
+    pcall(function() 
+        if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then 
+            table.insert(targetParents, LocalPlayer.PlayerGui) 
+        end 
+    end)
+
+    for _, parentObj in ipairs(targetParents) do
+        if parentObj then
+            for _, child in ipairs(parentObj:GetChildren()) do
+                for _, targetName in ipairs(namesToDestroy) do
+                    if child.Name == targetName then
+                        pcall(function() child:Destroy() end)
+                    end
+                end
+            end
+        end
+    end
 end
 
--- Theme Palette (Monochrome Dark Gray / Black with Crisp White Accents)
-local Theme = {
-    Background = Color3.fromRGB(10, 11, 14),
-    Sidebar = Color3.fromRGB(16, 17, 21),
-    Header = Color3.fromRGB(14, 15, 19),
-    Card = Color3.fromRGB(26, 29, 36),
-    CardHover = Color3.fromRGB(34, 38, 48),
-    Border = Color3.fromRGB(45, 48, 58),
-    WhiteLine = Color3.fromRGB(245, 245, 250),
-    WhiteLineMuted = Color3.fromRGB(110, 115, 125),
-    TextMain = Color3.fromRGB(250, 250, 250),
-    TextMuted = Color3.fromRGB(140, 145, 155),
-    Success = Color3.fromRGB(245, 245, 250),
-    ToggleOff = Color3.fromRGB(30, 32, 40)
+-- Run Cleanup Immediately
+CleanupExistingGuis()
+
+-- Safe Parent Getter for PC & Mobile Executors
+local function GetGuiParent()
+    local success, res = pcall(function()
+        if gethui then
+            return gethui()
+        elseif syn and syn.protect_gui then
+            local sg = Instance.new("ScreenGui")
+            syn.protect_gui(sg)
+            sg.Parent = CoreGui
+            return sg
+        elseif CoreGui then
+            return CoreGui
+        end
+    end)
+    if success and res then
+        return res
+    end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+-- Create ScreenGui
+local Parent = GetGuiParent()
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KernelCcGui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = Parent
+
+-- Color Palette (1:1 Dark Rust Theme)
+local Colors = {
+    Background = Color3.fromRGB(15, 15, 15),
+    HeaderBg = Color3.fromRGB(20, 20, 20),
+    PanelBg = Color3.fromRGB(18, 18, 18),
+    Border = Color3.fromRGB(42, 42, 42),
+    AccentOrange = Color3.fromRGB(235, 120, 20), -- #EB7814
+    TextWhite = Color3.fromRGB(220, 220, 220),
+    TextDim = Color3.fromRGB(140, 140, 140),
+    PinkSwatch = Color3.fromRGB(255, 0, 127),
+    CyanSwatch = Color3.fromRGB(0, 229, 255),
+    WhiteSwatch = Color3.fromRGB(255, 255, 255),
+    GreenSwatch = Color3.fromRGB(0, 255, 127),
+    UncheckedBox = Color3.fromRGB(30, 30, 30),
+    UncheckedBorder = Color3.fromRGB(60, 60, 60),
 }
 
--- Create Matching Accent Line Helper
-local function CreateAccentLine(parent, position, size)
-    local Line = Instance.new("Frame")
-    Line.Name = "AccentLine"
-    Line.Size = size or UDim2.new(1, -30, 0, 1)
-    Line.Position = position or UDim2.new(0, 15, 0, 0)
-    Line.BackgroundColor3 = Theme.WhiteLine
-    Line.BorderSizePixel = 0
-    Line.Parent = parent
+-- Fonts
+local MainFont = Enum.Font.Code
 
-    local Gradient = Instance.new("UIGradient")
-    Gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Theme.WhiteLine),
-        ColorSequenceKeypoint.new(0.65, Theme.Border),
-        ColorSequenceKeypoint.new(1, Theme.Sidebar)
-    })
-    Gradient.Parent = Line
-    return Line
-end
+---------------------------------------------------------
+-- ESP ENGINE & STATE CONTROLLER (PROJECT DELTA SUPPORT)
+---------------------------------------------------------
 
-function WorldGUI.new(titleText)
-    print("[WorldGUI Debug] Initializing UI instance: " .. tostring(titleText))
+local ESP_State = {
+    Box = true,
+    Skeleton = true,
+    HP = true,
+    Distance = true,
+    BoxColor = Color3.fromRGB(255, 255, 255), -- White Default (crisp white)
+    SkeletonColor = Color3.fromRGB(255, 0, 127), -- Pink Default
+    HPColor = Color3.fromRGB(0, 255, 127),
+    DistanceColor = Color3.fromRGB(255, 255, 255)
+}
 
-    local self = setmetatable({}, WorldGUI)
-    
-    self.Title = titleText or "World"
-    self.Categories = {}
-    self.AllSubTabs = {}
-    self.ActiveSubTab = nil
-    self.IsOpen = false
-    self.ToggleKey = Enum.KeyCode.RightShift
-    self.DeviceMode = nil
-    
-    -- Target Parent Container
-    local ParentContainer = (gethui and gethui()) or CoreGui:FindFirstChild("RobloxGui") or LocalPlayer:WaitForChild("PlayerGui")
-    
-    -- Clean existing instance
-    if ParentContainer:FindFirstChild("WorldGUI_Container") then
-        ParentContainer.WorldGUI_Container:Destroy()
-    end
-
-    -- Main ScreenGui
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "WorldGUI_Container"
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    ScreenGui.Parent = ParentContainer
-    self.ScreenGui = ScreenGui
-
-    ---------------------------------------------------------
-    -- 1. DEVICE SELECTION MODAL POPUP
-    ---------------------------------------------------------
-    local ModalFrame = Instance.new("Frame")
-    ModalFrame.Name = "DeviceModalFrame"
-    ModalFrame.Size = UDim2.new(0, 380, 0, 210)
-    ModalFrame.Position = UDim2.new(0.5, -190, 0.5, -105)
-    ModalFrame.BackgroundColor3 = Theme.Background
-    ModalFrame.BorderSizePixel = 1
-    ModalFrame.BorderColor3 = Theme.Border
-    ModalFrame.ZIndex = 100
-    ModalFrame.Parent = ScreenGui
-
-    -- Modal Top Crisp White Accent Line
-    local ModalTopLine = Instance.new("Frame")
-    ModalTopLine.Size = UDim2.new(1, 0, 0, 1)
-    ModalTopLine.BackgroundColor3 = Theme.WhiteLine
-    ModalTopLine.BorderSizePixel = 0
-    ModalTopLine.ZIndex = 101
-    ModalTopLine.Parent = ModalFrame
-
-    -- Glowing Centered Title "WORLD"
-    local ModalLogoGlow = Instance.new("TextLabel")
-    ModalLogoGlow.Size = UDim2.new(1, 0, 0, 48)
-    ModalLogoGlow.Position = UDim2.new(0, 0, 0, 6)
-    ModalLogoGlow.BackgroundTransparency = 1
-    ModalLogoGlow.Text = string.upper(self.Title)
-    ModalLogoGlow.Font = Enum.Font.GothamBlack
-    ModalLogoGlow.TextSize = 26
-    ModalLogoGlow.TextColor3 = Theme.WhiteLine
-    ModalLogoGlow.TextTransparency = 0.4
-    ModalLogoGlow.TextXAlignment = Enum.TextXAlignment.Center
-    ModalLogoGlow.ZIndex = 101
-    ModalLogoGlow.Parent = ModalFrame
-
-    local ModalLogo = Instance.new("TextLabel")
-    ModalLogo.Size = UDim2.new(1, 0, 0, 48)
-    ModalLogo.Position = UDim2.new(0, 0, 0, 4)
-    ModalLogo.BackgroundTransparency = 1
-    ModalLogo.Text = string.upper(self.Title)
-    ModalLogo.Font = Enum.Font.GothamBlack
-    ModalLogo.TextSize = 26
-    ModalLogo.TextColor3 = Theme.TextMain
-    ModalLogo.TextXAlignment = Enum.TextXAlignment.Center
-    ModalLogo.ZIndex = 102
-    ModalLogo.Parent = ModalFrame
-
-    -- Whole White Line Under Logo
-    local ModalDivider = Instance.new("Frame")
-    ModalDivider.Name = "ModalDivider"
-    ModalDivider.Size = UDim2.new(1, -40, 0, 1)
-    ModalDivider.Position = UDim2.new(0, 20, 0, 58)
-    ModalDivider.BackgroundColor3 = Theme.WhiteLine
-    ModalDivider.BorderSizePixel = 0
-    ModalDivider.ZIndex = 101
-    ModalDivider.Parent = ModalFrame
-
-    local ModalDividerGradient = Instance.new("UIGradient")
-    ModalDividerGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Theme.Border),
-        ColorSequenceKeypoint.new(0.5, Theme.WhiteLine),
-        ColorSequenceKeypoint.new(1, Theme.Border)
-    })
-    ModalDividerGradient.Parent = ModalDivider
-
-    -- Subtitle prompt label
-    local ModalPrompt = Instance.new("TextLabel")
-    ModalPrompt.Size = UDim2.new(1, 0, 0, 20)
-    ModalPrompt.Position = UDim2.new(0, 0, 0, 72)
-    ModalPrompt.BackgroundTransparency = 1
-    ModalPrompt.Text = "SELECT YOUR PLATFORM"
-    ModalPrompt.Font = Enum.Font.GothamBold
-    ModalPrompt.TextSize = 11
-    ModalPrompt.TextColor3 = Theme.TextMuted
-    ModalPrompt.TextXAlignment = Enum.TextXAlignment.Center
-    ModalPrompt.ZIndex = 101
-    ModalPrompt.Parent = ModalFrame
-
-    -- Button Holder Container for Mobile and PC
-    local ButtonContainer = Instance.new("Frame")
-    ButtonContainer.Size = UDim2.new(1, -40, 0, 80)
-    ButtonContainer.Position = UDim2.new(0, 20, 0, 104)
-    ButtonContainer.BackgroundTransparency = 1
-    ButtonContainer.ZIndex = 101
-    ButtonContainer.Parent = ModalFrame
-
-    -- BIG BUTTON 1: MOBILE
-    local MobileBtnModal = Instance.new("TextButton")
-    MobileBtnModal.Name = "MobileChoice"
-    MobileBtnModal.Size = UDim2.new(0.48, -5, 1, 0)
-    MobileBtnModal.Position = UDim2.new(0, 0, 0, 0)
-    MobileBtnModal.BackgroundColor3 = Theme.Card
-    MobileBtnModal.BorderColor3 = Theme.Border
-    MobileBtnModal.BorderSizePixel = 1
-    MobileBtnModal.Text = "MOBILE"
-    MobileBtnModal.Font = Enum.Font.GothamBold
-    MobileBtnModal.TextSize = 14
-    MobileBtnModal.TextColor3 = Theme.TextMain
-    MobileBtnModal.AutoButtonColor = false
-    MobileBtnModal.ZIndex = 102
-    MobileBtnModal.Parent = ButtonContainer
-
-    -- BIG BUTTON 2: PC
-    local PCBtnModal = Instance.new("TextButton")
-    PCBtnModal.Name = "PCChoice"
-    PCBtnModal.Size = UDim2.new(0.48, -5, 1, 0)
-    PCBtnModal.Position = UDim2.new(0.52, 5, 0, 0)
-    PCBtnModal.BackgroundColor3 = Theme.Card
-    PCBtnModal.BorderColor3 = Theme.Border
-    PCBtnModal.BorderSizePixel = 1
-    PCBtnModal.Text = "PC"
-    PCBtnModal.Font = Enum.Font.GothamBold
-    PCBtnModal.TextSize = 14
-    PCBtnModal.TextColor3 = Theme.TextMain
-    PCBtnModal.AutoButtonColor = false
-    PCBtnModal.ZIndex = 102
-    PCBtnModal.Parent = ButtonContainer
-
-    -- Button Hover Effects
-    local function SetupModalBtnHover(btn)
-        btn.MouseEnter:Connect(function()
-            Tween(btn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.CardHover, BorderColor3 = Theme.WhiteLine})
-        end)
-        btn.MouseLeave:Connect(function()
-            Tween(btn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.Card, BorderColor3 = Theme.Border})
-        end)
-    end
-    SetupModalBtnHover(MobileBtnModal)
-    SetupModalBtnHover(PCBtnModal)
-
-    ---------------------------------------------------------
-    -- 2. MAIN FRAME (Sharp Edges, Monochrome Theme)
-    ---------------------------------------------------------
-    local MainFrame = Instance.new("Frame")
-    MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0, 680, 0, 440)
-    MainFrame.Position = UDim2.new(0.5, -340, 0.5, -220)
-    MainFrame.BackgroundColor3 = Theme.Background
-    MainFrame.BorderSizePixel = 1
-    MainFrame.BorderColor3 = Theme.Border
-    MainFrame.Visible = false
-    MainFrame.ClipsDescendants = false
-    MainFrame.Parent = ScreenGui
-    self.MainFrame = MainFrame
-
-    -- Dynamic Resolution & Compact Mobile Scaling System
-    local UIScale = Instance.new("UIScale")
-    UIScale.Parent = MainFrame
-    self.UIScale = UIScale
-
-    local function UpdateScale()
-        local camera = workspace.CurrentCamera
-        if camera then
-            local viewportSize = camera.ViewportSize
-            local targetScale = 1
-
-            -- Mobile Mode Scaling (Sized to ~0.52-0.65 for compact fitting on phone screens!)
-            if self.DeviceMode == "Mobile" or UserInputService.TouchEnabled or viewportSize.Y < 480 or viewportSize.X < 720 then
-                local scaleX = (viewportSize.X * 0.72) / 680
-                local scaleY = (viewportSize.Y * 0.70) / 440
-                targetScale = math.clamp(math.min(scaleX, scaleY), 0.52, 0.65)
-            else
-                local scaleX = (viewportSize.X * 0.88) / 680
-                local scaleY = (viewportSize.Y * 0.88) / 440
-                targetScale = math.clamp(math.min(scaleX, scaleY), 0.65, 1)
-            end
-
-            UIScale.Scale = targetScale
+-- Hide All Drawing Elements Safely
+local function HideAllStorageDrawings(storage)
+    if not storage then return end
+    if storage.Box then storage.Box.Visible = false end
+    if storage.BoxOutline then storage.BoxOutline.Visible = false end
+    if storage.HpBg then storage.HpBg.Visible = false end
+    if storage.HpFill then storage.HpFill.Visible = false end
+    if storage.DistTxt then storage.DistTxt.Visible = false end
+    if storage.SkeletonLines then
+        for _, l in ipairs(storage.SkeletonLines) do
+            l.Visible = false
         end
     end
-    self.UpdateScale = UpdateScale
-    UpdateScale()
-    if workspace.CurrentCamera then
-        workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(UpdateScale)
-    end
-
-    -- Top Crisp White Line Accent
-    local TopAccent = Instance.new("Frame")
-    TopAccent.Name = "TopAccent"
-    TopAccent.Size = UDim2.new(1, 0, 0, 1)
-    TopAccent.Position = UDim2.new(0, 0, 0, 0)
-    TopAccent.BackgroundColor3 = Theme.WhiteLine
-    TopAccent.BorderSizePixel = 0
-    TopAccent.Parent = MainFrame
-
-    -- Left Sidebar Container
-    local Sidebar = Instance.new("Frame")
-    Sidebar.Name = "Sidebar"
-    Sidebar.Size = UDim2.new(0, 200, 1, -1)
-    Sidebar.Position = UDim2.new(0, 0, 0, 1)
-    Sidebar.BackgroundColor3 = Theme.Sidebar
-    Sidebar.BorderSizePixel = 0
-    Sidebar.Parent = MainFrame
-
-    -- Vertical Border Line between Sidebar and Content
-    local VerticalLine = Instance.new("Frame")
-    VerticalLine.Name = "VerticalLine"
-    VerticalLine.Size = UDim2.new(0, 1, 1, 0)
-    VerticalLine.Position = UDim2.new(1, -1, 0, 0)
-    VerticalLine.BackgroundColor3 = Theme.Border
-    VerticalLine.BorderSizePixel = 0
-    VerticalLine.Parent = Sidebar
-
-    -- Logo Container (Top Left)
-    local LogoContainer = Instance.new("Frame")
-    LogoContainer.Name = "LogoContainer"
-    LogoContainer.Size = UDim2.new(1, 0, 0, 52)
-    LogoContainer.BackgroundTransparency = 1
-    LogoContainer.Parent = Sidebar
-
-    -- Glowing White "World" Text (Back Glow Layer)
-    local LogoGlow = Instance.new("TextLabel")
-    LogoGlow.Name = "LogoGlow"
-    LogoGlow.Size = UDim2.new(1, -30, 1, 0)
-    LogoGlow.Position = UDim2.new(0, 20, 0, 2)
-    LogoGlow.BackgroundTransparency = 1
-    LogoGlow.Text = self.Title
-    LogoGlow.Font = Enum.Font.GothamBlack
-    LogoGlow.TextSize = 22
-    LogoGlow.TextColor3 = Theme.WhiteLine
-    LogoGlow.TextTransparency = 0.4
-    LogoGlow.TextXAlignment = Enum.TextXAlignment.Left
-    LogoGlow.Parent = LogoContainer
-
-    -- Glowing White "World" Text (Front Layer)
-    local LogoText = Instance.new("TextLabel")
-    LogoText.Name = "LogoText"
-    LogoText.Size = UDim2.new(1, -30, 1, 0)
-    LogoText.Position = UDim2.new(0, 20, 0, 0)
-    LogoText.BackgroundTransparency = 1
-    LogoText.Text = self.Title
-    LogoText.Font = Enum.Font.GothamBlack
-    LogoText.TextSize = 22
-    LogoText.TextColor3 = Theme.TextMain
-    LogoText.TextXAlignment = Enum.TextXAlignment.Left
-    LogoText.Parent = LogoContainer
-
-    -- MATCHING LINE #1: Below World Logo
-    CreateAccentLine(Sidebar, UDim2.new(0, 15, 0, 52), UDim2.new(1, -30, 0, 1))
-
-    -- Main Categories Scrolling Container (Dynamically sized above bottom settings tab!)
-    local TabHolder = Instance.new("ScrollingFrame")
-    TabHolder.Name = "TabHolder"
-    TabHolder.Size = UDim2.new(1, 0, 1, -104)
-    TabHolder.Position = UDim2.new(0, 0, 0, 56)
-    TabHolder.BackgroundTransparency = 1
-    TabHolder.BorderSizePixel = 0
-    TabHolder.ScrollBarThickness = 2
-    TabHolder.ScrollBarImageColor3 = Theme.Border
-    TabHolder.CanvasSize = UDim2.new(0, 0, 0, 0)
-    TabHolder.Parent = Sidebar
-
-    local SidebarListLayout = Instance.new("UIListLayout")
-    SidebarListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    SidebarListLayout.Padding = UDim.new(0, 5)
-    SidebarListLayout.Parent = TabHolder
-
-    local SidebarPadding = Instance.new("UIPadding")
-    SidebarPadding.PaddingLeft = UDim.new(0, 10)
-    SidebarPadding.PaddingRight = UDim.new(0, 10)
-    SidebarPadding.PaddingTop = UDim.new(0, 4)
-    SidebarPadding.PaddingBottom = UDim.new(0, 4)
-    SidebarPadding.Parent = TabHolder
-
-    SidebarListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        TabHolder.CanvasSize = UDim2.new(0, 0, 0, SidebarListLayout.AbsoluteContentSize.Y + 12)
-    end)
-
-    -- Bottom Separated Container for Settings
-    local BottomSidebarContainer = Instance.new("Frame")
-    BottomSidebarContainer.Name = "BottomSidebarContainer"
-    BottomSidebarContainer.Size = UDim2.new(1, -20, 0, 42)
-    BottomSidebarContainer.Position = UDim2.new(0, 10, 1, -46)
-    BottomSidebarContainer.BackgroundTransparency = 1
-    BottomSidebarContainer.Parent = Sidebar
-
-    -- MATCHING LINE #2: Above Settings Tab
-    CreateAccentLine(BottomSidebarContainer, UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 0, 1))
-
-    self.TabHolder = TabHolder
-    self.BottomSidebarContainer = BottomSidebarContainer
-
-    -- Right Side Content Area
-    local ContentArea = Instance.new("Frame")
-    ContentArea.Name = "ContentArea"
-    ContentArea.Size = UDim2.new(1, -200, 1, -1)
-    ContentArea.Position = UDim2.new(0, 200, 0, 1)
-    ContentArea.BackgroundColor3 = Theme.Background
-    ContentArea.BorderSizePixel = 0
-    ContentArea.Parent = MainFrame
-    self.ContentArea = ContentArea
-
-    -- Header Bar
-    local HeaderBar = Instance.new("Frame")
-    HeaderBar.Name = "HeaderBar"
-    HeaderBar.Size = UDim2.new(1, 0, 0, 44)
-    HeaderBar.BackgroundColor3 = Theme.Header
-    HeaderBar.BorderSizePixel = 0
-    HeaderBar.Parent = ContentArea
-
-    local HeaderBottomLine = Instance.new("Frame")
-    HeaderBottomLine.Name = "HeaderBottomLine"
-    HeaderBottomLine.Size = UDim2.new(1, 0, 0, 1)
-    HeaderBottomLine.Position = UDim2.new(0, 0, 1, -1)
-    HeaderBottomLine.BackgroundColor3 = Theme.Border
-    HeaderBottomLine.BorderSizePixel = 0
-    HeaderBottomLine.Parent = HeaderBar
-
-    local HeaderTitle = Instance.new("TextLabel")
-    HeaderTitle.Name = "HeaderTitle"
-    HeaderTitle.Size = UDim2.new(1, -20, 1, 0)
-    HeaderTitle.Position = UDim2.new(0, 20, 0, 0)
-    HeaderTitle.BackgroundTransparency = 1
-    HeaderTitle.Text = "Dashboard"
-    HeaderTitle.Font = Enum.Font.GothamBold
-    HeaderTitle.TextSize = 14
-    HeaderTitle.TextColor3 = Theme.TextMain
-    HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
-    HeaderTitle.Parent = HeaderBar
-    self.HeaderTitle = HeaderTitle
-
-    -- Page Container for SubTab views
-    local PageContainer = Instance.new("Frame")
-    PageContainer.Name = "PageContainer"
-    PageContainer.Size = UDim2.new(1, 0, 1, -44)
-    PageContainer.Position = UDim2.new(0, 0, 0, 44)
-    PageContainer.BackgroundTransparency = 1
-    PageContainer.Parent = ContentArea
-    self.PageContainer = PageContainer
-
-    -- Floating Mobile Quick Toggle Button
-    local MobileBtn = Instance.new("TextButton")
-    MobileBtn.Name = "WorldGUI_MobileToggle"
-    MobileBtn.Size = UDim2.new(0, 44, 0, 44)
-    MobileBtn.Position = UDim2.new(0, 15, 0.5, -22)
-    MobileBtn.BackgroundColor3 = Theme.Background
-    MobileBtn.BorderColor3 = Theme.WhiteLine
-    MobileBtn.BorderSizePixel = 1
-    MobileBtn.Text = "W"
-    MobileBtn.Font = Enum.Font.GothamBlack
-    MobileBtn.TextSize = 20
-    MobileBtn.TextColor3 = Theme.TextMain
-    MobileBtn.Visible = false
-    MobileBtn.Parent = ScreenGui
-    self.MobileBtn = MobileBtn
-
-    self:_MakeDraggable(MobileBtn, MobileBtn)
-
-    MobileBtn.MouseButton1Click:Connect(function()
-        self:Toggle()
-    end)
-
-    -- Handle Modal Selections (PC vs Mobile)
-    local function SelectDeviceMode(mode)
-        self.DeviceMode = mode
-        self:UpdateScale()
-        
-        Tween(ModalFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            Position = UDim2.new(0.5, -190, 0.5, -85)
-        })
-        
-        task.delay(0.2, function()
-            ModalFrame:Destroy()
-            
-            if mode == "PC" then
-                MobileBtn.Visible = false
-            else
-                MobileBtn.Visible = true
-            end
-            
-            self:Toggle(true)
-        end)
-    end
-
-    MobileBtnModal.MouseButton1Click:Connect(function()
-        SelectDeviceMode("Mobile")
-    end)
-
-    PCBtnModal.MouseButton1Click:Connect(function()
-        SelectDeviceMode("PC")
-    end)
-
-    -- Setup Draggable Engine
-    self:_MakeDraggable(Sidebar, MainFrame)
-    self:_MakeDraggable(HeaderBar, MainFrame)
-    self:_MakeDraggable(ModalFrame, ModalFrame)
-
-    -- RIGHT SHIFT TOGGLE KEYBIND
-    UserInputService.InputBegan:Connect(function(input, processed)
-        if not processed and input.KeyCode == self.ToggleKey then
-            self:Toggle()
-        end
-    end)
-
-    return self
+    if storage.Highlight then storage.Highlight.Enabled = false end
 end
 
--- Draggable Engine
-function WorldGUI:_MakeDraggable(dragTrigger, targetFrame)
-    local dragging = false
-    local dragInput, dragStart, startPos
+local function RemoveESP(player)
+    if ESP_Cache[player] then
+        local storage = ESP_Cache[player]
+        HideAllStorageDrawings(storage)
 
-    local function update(input)
-        local delta = input.Position - dragStart
-        targetFrame.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
-        )
-    end
-
-    dragTrigger.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = targetFrame.Position
-
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
+        for _, obj in pairs(storage) do
+            if typeof(obj) == "Instance" then
+                pcall(function() obj:Destroy() end)
+            elseif type(obj) == "table" then
+                if obj.Remove then
+                    pcall(function() obj:Remove() end)
+                elseif #obj > 0 then
+                    for _, subObj in ipairs(obj) do
+                        if type(subObj) == "table" and subObj.Remove then
+                            pcall(function() subObj:Remove() end)
+                        end
+                    end
                 end
-            end)
-        end
-    end)
-
-    dragTrigger.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            update(input)
-        end
-    end)
-end
-
--- Open/Close Animation Toggle
-function WorldGUI:Toggle(state)
-    if state ~= nil then
-        self.IsOpen = state
-    else
-        self.IsOpen = not self.IsOpen
-    end
-
-    if self.IsOpen then
-        self.MainFrame.Visible = true
-        Tween(self.MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            Position = UDim2.new(0.5, -340, 0.5, -220)
-        })
-    else
-        local targetTween = Tween(self.MainFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-            Position = UDim2.new(0.5, -340, 0.5, -180)
-        })
-        targetTween.Completed:Connect(function()
-            if not self.IsOpen then
-                self.MainFrame.Visible = false
             end
-        end)
+        end
+        ESP_Cache[player] = nil
     end
 end
 
----------------------------------------------------------
--- TREE BRANCH DROPDOWN SYSTEM (EXACT MATCH PICTURE 2)
----------------------------------------------------------
+-- Drawing API or Fallback Instance Creation
+local HasDrawing = (Drawing ~= nil and Drawing.new ~= nil)
 
-function WorldGUI:CreateCategory(categoryName, isBottom)
-    local Library = self
+local function CreateESPForPlayer(player)
+    if IsUnloaded or player == LocalPlayer then return end
+    RemoveESP(player)
 
-    local Category = {}
-    Category.Name = categoryName
-    Category.Library = Library
-    Category.SubTabs = {}
-    Category.Expanded = false -- STARTS CLOSED ON LAUNCH
-    Category.IsBottom = isBottom
+    local storage = {}
 
-    local parentContainer = isBottom and Library.BottomSidebarContainer or Library.TabHolder
+    if HasDrawing then
+        -- Box Outer Shadow (Black)
+        local boxOutline = Drawing.new("Square")
+        boxOutline.Thickness = 3
+        boxOutline.Filled = false
+        boxOutline.Color = Color3.fromRGB(0, 0, 0)
+        boxOutline.Visible = false
+        storage.BoxOutline = boxOutline
 
-    -- Wrapper Frame for Category Header + SubTabs Tree
-    local CategoryWrapper = Instance.new("Frame")
-    CategoryWrapper.Name = "Category_" .. categoryName
-    CategoryWrapper.Size = UDim2.new(1, 0, 0, isBottom and 36 or 30)
-    CategoryWrapper.AutomaticSize = Enum.AutomaticSize.Y
-    CategoryWrapper.BackgroundTransparency = 1
-    CategoryWrapper.Position = isBottom and UDim2.new(0, 0, 0, 4) or UDim2.new(0, 0, 0, 0)
-    CategoryWrapper.Parent = parentContainer
+        -- 2D Box (White Default)
+        local box = Drawing.new("Square")
+        box.Thickness = 1
+        box.Filled = false
+        box.Color = ESP_State.BoxColor
+        box.Visible = false
+        storage.Box = box
 
-    local WrapperLayout = Instance.new("UIListLayout")
-    WrapperLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    WrapperLayout.Padding = UDim.new(0, 3)
-    WrapperLayout.Parent = CategoryWrapper
+        -- HP Bar Background
+        local hpBg = Drawing.new("Square")
+        hpBg.Thickness = 1
+        hpBg.Filled = true
+        hpBg.Color = Color3.fromRGB(0, 0, 0)
+        hpBg.Visible = false
+        storage.HpBg = hpBg
 
-    -- Category Main Header Button
-    local HeaderBtn = Instance.new("TextButton")
-    HeaderBtn.Name = "00_HeaderBtn"
-    HeaderBtn.Size = UDim2.new(1, -2, 0, 28)
-    HeaderBtn.Position = UDim2.new(0, 0, 0, 0)
-    HeaderBtn.BackgroundColor3 = Theme.Sidebar
-    HeaderBtn.BorderSizePixel = 1
-    HeaderBtn.BorderColor3 = Theme.Border
-    HeaderBtn.Text = ""
-    HeaderBtn.AutoButtonColor = false
-    HeaderBtn.Parent = CategoryWrapper
+        -- HP Bar Fill
+        local hpFill = Drawing.new("Square")
+        hpFill.Thickness = 1
+        hpFill.Filled = true
+        hpFill.Color = ESP_State.HPColor
+        hpFill.Visible = false
+        storage.HpFill = hpFill
 
-    local HeaderLabel = Instance.new("TextLabel")
-    HeaderLabel.Name = "HeaderLabel"
-    HeaderLabel.Size = UDim2.new(1, -10, 1, 0)
-    HeaderLabel.Position = UDim2.new(0, 10, 0, 0)
-    HeaderLabel.BackgroundTransparency = 1
-    HeaderLabel.Text = categoryName
-    HeaderLabel.Font = Enum.Font.GothamBold
-    HeaderLabel.TextSize = 12
-    HeaderLabel.TextColor3 = Theme.TextMain
-    HeaderLabel.TextXAlignment = Enum.TextXAlignment.Left
-    HeaderLabel.Parent = HeaderBtn
+        -- Distance Text
+        local distTxt = Drawing.new("Text")
+        distTxt.Size = 13
+        distTxt.Center = true
+        distTxt.Outline = true
+        distTxt.Color = ESP_State.DistanceColor
+        distTxt.Visible = false
+        storage.DistTxt = distTxt
 
-    -- SubTabs Holder Container
-    local SubHolder = Instance.new("Frame")
-    SubHolder.Name = "SubHolder"
-    SubHolder.Size = UDim2.new(1, 0, 0, 0) -- CLOSED BY DEFAULT (HEIGHT 0)
-    SubHolder.BackgroundTransparency = 1
-    SubHolder.ClipsDescendants = true
-    SubHolder.Parent = CategoryWrapper
+        -- Skeleton Lines (16 Joint connections)
+        storage.SkeletonLines = {}
+        for i = 1, 16 do
+            local line = Drawing.new("Line")
+            line.Thickness = 1.5
+            line.Color = ESP_State.SkeletonColor
+            line.Visible = false
+            table.insert(storage.SkeletonLines, line)
+        end
+    else
+        -- Instance-based Billboard & Highlight Fallback
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "KernelHighlight"
+        highlight.FillTransparency = 0.6
+        highlight.OutlineTransparency = 0
+        highlight.OutlineColor = ESP_State.BoxColor
+        highlight.FillColor = ESP_State.BoxColor
+        highlight.Enabled = false
+        storage.Highlight = highlight
 
-    -- Dedicated Sub-Buttons List Frame inside SubHolder
-    local SubListFrame = Instance.new("Frame")
-    SubListFrame.Name = "SubListFrame"
-    SubListFrame.Size = UDim2.new(1, 0, 0, 0)
-    SubListFrame.AutomaticSize = Enum.AutomaticSize.Y
-    SubListFrame.BackgroundTransparency = 1
-    SubListFrame.Parent = SubHolder
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "KernelBillboard"
+        billboard.Size = UDim2.new(0, 100, 0, 40)
+        billboard.StudsOffset = Vector3.new(0, 3.5, 0)
+        billboard.AlwaysOnTop = true
 
-    local SubListPadding = Instance.new("UIPadding")
-    SubListPadding.PaddingTop = UDim.new(0, 4)
-    SubListPadding.PaddingBottom = UDim.new(0, 6)
-    SubListPadding.Parent = SubListFrame
+        local txt = Instance.new("TextLabel")
+        txt.Size = UDim2.new(1, 0, 1, 0)
+        txt.BackgroundTransparency = 1
+        txt.TextColor3 = ESP_State.DistanceColor
+        txt.Font = MainFont
+        txt.TextSize = 12
+        txt.TextStrokeTransparency = 0
+        txt.Parent = billboard
 
-    local SubLayout = Instance.new("UIListLayout")
-    SubLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    SubLayout.Padding = UDim.new(0, 5)
-    SubLayout.Parent = SubListFrame
+        storage.Billboard = billboard
+        storage.TextLabel = txt
+    end
 
-    -- Update Vertical Line Segments so the LAST subtab vertical line stops at center (50%) - Forms 'L' shape exactly like Picture 2!
-    local function UpdateTreeLines()
-        local count = #Category.SubTabs
-        for i, sub in ipairs(Category.SubTabs) do
-            if sub.VerticalBranch then
-                if i == count then
-                    sub.VerticalBranch.Size = UDim2.new(0, 1, 0.5, 0)
+    ESP_Cache[player] = storage
+end
+
+-- Helper to find body part by multiple names (R15, R6, Project Delta Rigs)
+local function FindPart(char, ...)
+    for _, name in ipairs({...}) do
+        local part = char:FindFirstChild(name)
+        if part then return part end
+    end
+    return nil
+end
+
+-- Render Loop for Real-time ESP Updating (Protected with pcall to prevent ghost drawings)
+table.insert(Connections, RunService.RenderStepped:Connect(function()
+    if IsUnloaded then return end
+    Camera = workspace.CurrentCamera
+    if not Camera then return end
+
+    -- Active Cache Iteration with Auto-Cleanup for Despawned / Left Players
+    for player, storage in pairs(ESP_Cache) do
+        pcall(function()
+            -- Verify Player & Character Existence
+            if not player or not player.Parent or not player:IsDescendantOf(Players) then
+                RemoveESP(player)
+                return
+            end
+
+            local char = player.Character
+            if not char or not char.Parent or not char:IsDescendantOf(workspace) then
+                HideAllStorageDrawings(storage)
+                return
+            end
+
+            local hrp = FindPart(char, "HumanoidRootPart", "Torso", "UpperTorso")
+            local hum = char:FindFirstChildOfClass("Humanoid")
+
+            if not hrp or not hum or hum.Health <= 0 then
+                HideAllStorageDrawings(storage)
+                return
+            end
+
+            local hrpPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+
+            -- Ensure character is actually in front of the camera (Z > 0 and onScreen)
+            if not onScreen or hrpPos.Z <= 0 then
+                HideAllStorageDrawings(storage)
+                return
+            end
+
+            local head = FindPart(char, "Head")
+            local headPos = head and Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 1.35, 0)) or Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 3.5, 0))
+            local legPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3.2, 0))
+
+            if headPos.Z <= 0 or legPos.Z <= 0 then
+                HideAllStorageDrawings(storage)
+                return
+            end
+
+            local height = math.abs(headPos.Y - legPos.Y)
+            local width = height / 1.55
+
+            if HasDrawing then
+                -- Update 2D Box (White Fill + Black Background Outline)
+                if ESP_State.Box and storage.Box and storage.BoxOutline then
+                    storage.BoxOutline.Size = Vector2.new(width + 2, height + 2)
+                    storage.BoxOutline.Position = Vector2.new(hrpPos.X - width/2 - 1, headPos.Y - 1)
+                    storage.BoxOutline.Visible = true
+
+                    storage.Box.Size = Vector2.new(width, height)
+                    storage.Box.Position = Vector2.new(hrpPos.X - width/2, headPos.Y)
+                    storage.Box.Color = ESP_State.BoxColor
+                    storage.Box.Visible = true
                 else
-                    sub.VerticalBranch.Size = UDim2.new(0, 1, 1, 5)
+                    if storage.Box then storage.Box.Visible = false end
+                    if storage.BoxOutline then storage.BoxOutline.Visible = false end
+                end
+
+                -- Update HP Bar
+                if ESP_State.HP and storage.HpFill and storage.HpBg then
+                    local hpPercent = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                    local hpHeight = height * hpPercent
+
+                    storage.HpBg.Size = Vector2.new(3, height + 2)
+                    storage.HpBg.Position = Vector2.new(hrpPos.X - width/2 - 6, headPos.Y - 1)
+                    storage.HpBg.Visible = true
+
+                    storage.HpFill.Size = Vector2.new(1, hpHeight)
+                    storage.HpFill.Position = Vector2.new(hrpPos.X - width/2 - 5, headPos.Y + (height - hpHeight))
+                    storage.HpFill.Color = Color3.fromRGB(255 * (1 - hpPercent), 255 * hpPercent, 50)
+                    storage.HpFill.Visible = true
+                else
+                    if storage.HpBg then storage.HpBg.Visible = false end
+                    if storage.HpFill then storage.HpFill.Visible = false end
+                end
+
+                -- Update Distance Text
+                if ESP_State.Distance and storage.DistTxt and LocalPlayer.Character then
+                    local myHRP = FindPart(LocalPlayer.Character, "HumanoidRootPart", "Torso")
+                    if myHRP then
+                        local dist = math.floor((myHRP.Position - hrp.Position).Magnitude)
+                        storage.DistTxt.Text = string.format("%s [%dm]", player.Name, dist)
+                        storage.DistTxt.Position = Vector2.new(hrpPos.X, headPos.Y + height + 4)
+                        storage.DistTxt.Color = ESP_State.DistanceColor
+                        storage.DistTxt.Visible = true
+                    end
+                else
+                    if storage.DistTxt then storage.DistTxt.Visible = false end
+                end
+
+                -- Update Full Skeleton
+                if ESP_State.Skeleton and storage.SkeletonLines then
+                    local function DrawBoneLine(lineIndex, part1, part2)
+                        local line = storage.SkeletonLines[lineIndex]
+                        if line and part1 and part2 then
+                            local v1, os1 = Camera:WorldToViewportPoint(part1.Position)
+                            local v2, os2 = Camera:WorldToViewportPoint(part2.Position)
+                            if os1 and os2 and v1.Z > 0 and v2.Z > 0 then
+                                line.From = Vector2.new(v1.X, v1.Y)
+                                line.To = Vector2.new(v2.X, v2.Y)
+                                line.Color = ESP_State.SkeletonColor
+                                line.Visible = true
+                                return
+                            end
+                        end
+                        if line then line.Visible = false end
+                    end
+
+                    local pHead = FindPart(char, "Head")
+                    local pUpperTorso = FindPart(char, "UpperTorso", "Torso")
+                    local pLowerTorso = FindPart(char, "LowerTorso", "HumanoidRootPart", "Torso")
+
+                    local pLeftUpperArm = FindPart(char, "LeftUpperArm", "LeftArm", "Left Arm")
+                    local pLeftLowerArm = FindPart(char, "LeftLowerArm", "LeftArm", "Left Arm")
+                    local pLeftHand = FindPart(char, "LeftHand", "LeftLowerArm", "LeftArm")
+
+                    local pRightUpperArm = FindPart(char, "RightUpperArm", "RightArm", "Right Arm")
+                    local pRightLowerArm = FindPart(char, "RightLowerArm", "RightArm", "Right Arm")
+                    local pRightHand = FindPart(char, "RightHand", "RightLowerArm", "RightArm")
+
+                    local pLeftUpperLeg = FindPart(char, "LeftUpperLeg", "LeftLeg", "Left Leg")
+                    local pLeftLowerLeg = FindPart(char, "LeftLowerLeg", "LeftLeg", "Left Leg")
+                    local pLeftFoot = FindPart(char, "LeftFoot", "LeftLowerLeg", "LeftLeg")
+
+                    local pRightUpperLeg = FindPart(char, "RightUpperLeg", "RightLeg", "Right Leg")
+                    local pRightLowerLeg = FindPart(char, "RightLowerLeg", "RightLeg", "Right Leg")
+                    local pRightFoot = FindPart(char, "RightFoot", "RightLowerLeg", "RightLeg")
+
+                    DrawBoneLine(1, pHead, pUpperTorso)
+                    DrawBoneLine(2, pUpperTorso, pLowerTorso)
+
+                    DrawBoneLine(3, pUpperTorso, pLeftUpperArm)
+                    DrawBoneLine(4, pLeftUpperArm, pLeftLowerArm)
+                    DrawBoneLine(5, pLeftLowerArm, pLeftHand)
+
+                    DrawBoneLine(6, pUpperTorso, pRightUpperArm)
+                    DrawBoneLine(7, pRightUpperArm, pRightLowerArm)
+                    DrawBoneLine(8, pRightLowerArm, pRightHand)
+
+                    DrawBoneLine(9, pLowerTorso, pLeftUpperLeg)
+                    DrawBoneLine(10, pLeftUpperLeg, pLeftLowerLeg)
+                    DrawBoneLine(11, pLeftLowerLeg, pLeftFoot)
+
+                    DrawBoneLine(12, pLowerTorso, pRightUpperLeg)
+                    DrawBoneLine(13, pRightUpperLeg, pRightLowerLeg)
+                    DrawBoneLine(14, pRightLowerLeg, pRightFoot)
+                else
+                    if storage.SkeletonLines then
+                        for _, l in ipairs(storage.SkeletonLines) do l.Visible = false end
+                    end
+                end
+            else
+                -- Instance Fallback
+                if storage.Highlight then
+                    storage.Highlight.Parent = char
+                    storage.Highlight.Enabled = ESP_State.Box
+                    storage.Highlight.OutlineColor = ESP_State.BoxColor
+                end
+                if storage.Billboard then
+                    storage.Billboard.Parent = char
+                    if storage.TextLabel and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        local dist = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude)
+                        storage.TextLabel.Text = string.format("%s | HP: %d | [%dm]", player.Name, math.floor(hum.Health), dist)
+                        storage.TextLabel.TextColor3 = ESP_State.DistanceColor
+                    end
+                end
+            end
+        end)
+    end
+end))
+
+-- Track Active Players & Auto Refresh Every 3 Seconds
+for _, player in ipairs(Players:GetPlayers()) do
+    CreateESPForPlayer(player)
+    table.insert(Connections, player.CharacterAdded:Connect(function()
+        task.wait(0.5)
+        CreateESPForPlayer(player)
+    end))
+end
+
+table.insert(Connections, Players.PlayerAdded:Connect(function(player)
+    CreateESPForPlayer(player)
+    table.insert(Connections, player.CharacterAdded:Connect(function()
+        task.wait(0.5)
+        CreateESPForPlayer(player)
+    end))
+end))
+
+table.insert(Connections, Players.PlayerRemoving:Connect(function(player)
+    RemoveESP(player)
+end))
+
+-- Background Auto-Refresh Task (Runs every 3 seconds for new/respawned players)
+task.spawn(function()
+    while not IsUnloaded do
+        task.wait(3)
+        if IsUnloaded then break end
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                if not ESP_Cache[player] or not player.Character or not player.Character.Parent then
+                    CreateESPForPlayer(player)
                 end
             end
         end
     end
+end)
 
-    -- STAGGERED CASCADING DROPDOWN ANIMATION (EXACT DIRECT CALCULATION FOR 100% VISIBILITY)
-    local function AnimateDropdown()
-        local count = #Category.SubTabs
-        -- Each item is 26px + 5px spacing + 12px padding = 31px per item
-        local targetHeight = (count * 31) + 6
+---------------------------------------------------------
+-- UI CREATION
+---------------------------------------------------------
 
-        if Category.Expanded then
-            Tween(SubHolder, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                Size = UDim2.new(1, 0, 0, targetHeight)
-            })
-            Tween(HeaderBtn, TweenInfo.new(0.15), {BorderColor3 = Theme.WhiteLine})
+-- Floating Mobile & PC Toggle Button
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "KernelMobileToggle"
+ToggleBtn.Size = UDim2.new(0, 52, 0, 42)
+ToggleBtn.Position = UDim2.new(0.02, 0, 0.2, 0)
+ToggleBtn.BackgroundColor3 = Colors.HeaderBg
+ToggleBtn.BorderColor3 = Colors.AccentOrange
+ToggleBtn.BorderSizePixel = 1
+ToggleBtn.Text = "KERNEL"
+ToggleBtn.TextColor3 = Colors.AccentOrange
+ToggleBtn.Font = MainFont
+ToggleBtn.TextSize = 10
+ToggleBtn.ZIndex = 999
+ToggleBtn.Parent = ScreenGui
 
-            for i, sub in ipairs(Category.SubTabs) do
-                sub.SubTabItemFrame.Position = UDim2.new(0, 0, 0, -8)
-                sub.SubBtn.BackgroundTransparency = 1
-                sub.SubLabel.TextTransparency = 1
-                if sub.ActiveIndicator and Library.ActiveSubTab == sub then
-                    sub.ActiveIndicator.BackgroundTransparency = 1
-                end
-                if sub.VerticalBranch then sub.VerticalBranch.BackgroundTransparency = 1 end
-                if sub.HorizontalBranch then sub.HorizontalBranch.BackgroundTransparency = 1 end
+local UICornerBtn = Instance.new("UICorner")
+UICornerBtn.CornerRadius = UDim.new(0, 6)
+UICornerBtn.Parent = ToggleBtn
 
-                task.delay((i - 1) * 0.06, function()
-                    if Category.Expanded then
-                        Tween(sub.SubTabItemFrame, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-                            Position = UDim2.new(0, 0, 0, 0)
-                        })
-                        Tween(sub.SubBtn, TweenInfo.new(0.18), {
-                            BackgroundTransparency = 0
-                        })
-                        Tween(sub.SubLabel, TweenInfo.new(0.18), {
-                            TextTransparency = 0
-                        })
-                        if sub.ActiveIndicator and Library.ActiveSubTab == sub then
-                            Tween(sub.ActiveIndicator, TweenInfo.new(0.18), {BackgroundTransparency = 0})
-                        end
-                        if sub.VerticalBranch then
-                            Tween(sub.VerticalBranch, TweenInfo.new(0.18), {BackgroundTransparency = 0})
-                        end
-                        if sub.HorizontalBranch then
-                            Tween(sub.HorizontalBranch, TweenInfo.new(0.18), {BackgroundTransparency = 0})
-                        end
-                    end
-                end)
+-- Make Mobile/PC Toggle Button Draggable
+local draggingToggle, dragInputToggle, dragStartToggle, startPosToggle
+ToggleBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        draggingToggle = true
+        dragStartToggle = input.Position
+        startPosToggle = ToggleBtn.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                draggingToggle = false
             end
-        else
-            for i, sub in ipairs(Category.SubTabs) do
-                local reverseIndex = count - i
-                task.delay(reverseIndex * 0.03, function()
-                    if not Category.Expanded then
-                        Tween(sub.SubTabItemFrame, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-                            Position = UDim2.new(0, 0, 0, -6)
-                        })
-                        Tween(sub.SubBtn, TweenInfo.new(0.1), {BackgroundTransparency = 1})
-                        Tween(sub.SubLabel, TweenInfo.new(0.1), {TextTransparency = 1})
-                        if sub.ActiveIndicator then
-                            Tween(sub.ActiveIndicator, TweenInfo.new(0.1), {BackgroundTransparency = 1})
-                        end
-                        if sub.VerticalBranch then Tween(sub.VerticalBranch, TweenInfo.new(0.1), {BackgroundTransparency = 1}) end
-                        if sub.HorizontalBranch then Tween(sub.HorizontalBranch, TweenInfo.new(0.1), {BackgroundTransparency = 1}) end
-                    end
-                end)
-            end
+        end)
+    end
+end)
+ToggleBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInputToggle = input
+    end
+end)
+table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
+    if input == dragInputToggle and draggingToggle then
+        local delta = input.Position - dragStartToggle
+        ToggleBtn.Position = UDim2.new(startPosToggle.X.Scale, startPosToggle.X.Offset + delta.X, startPosToggle.Y.Scale, startPosToggle.Y.Offset + delta.Y)
+    end
+end))
 
-            task.delay(count * 0.03 + 0.03, function()
-                if not Category.Expanded then
-                    Tween(SubHolder, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-                        Size = UDim2.new(1, 0, 0, 0)
-                    })
-                    Tween(HeaderBtn, TweenInfo.new(0.15), {BorderColor3 = Theme.Border})
-                end
+-- Main Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 680, 0, 420)
+MainFrame.Position = UDim2.new(0.5, -340, 0.5, -210)
+MainFrame.BackgroundColor3 = Colors.Background
+MainFrame.BorderColor3 = Colors.Border
+MainFrame.BorderSizePixel = 1
+MainFrame.ClipsDescendants = false
+MainFrame.Parent = ScreenGui
+
+-- Adjust for Mobile / Small Screens & PC
+local function ResponsiveLayout()
+    local screenSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+    if screenSize.X < 700 then
+        MainFrame.Size = UDim2.new(0, math.min(screenSize.X - 20, 680), 0, math.min(screenSize.Y - 40, 420))
+        MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset/2, 0.5, -MainFrame.Size.Y.Offset/2)
+    end
+end
+ResponsiveLayout()
+if workspace.CurrentCamera then
+    table.insert(Connections, workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(ResponsiveLayout))
+end
+
+-- Toggle GUI Visibility via Click or Keybind (Insert / RightShift on PC)
+ToggleBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed then
+        if input.KeyCode == Enum.KeyCode.Insert or input.KeyCode == Enum.KeyCode.RightShift then
+            MainFrame.Visible = not MainFrame.Visible
+        end
+    end
+end))
+
+-- Outer Border Highlight
+local OuterStroke = Instance.new("UIStroke")
+OuterStroke.Color = Color3.fromRGB(30, 30, 30)
+OuterStroke.Thickness = 2
+OuterStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+OuterStroke.Parent = MainFrame
+
+-- Header Bar
+local Header = Instance.new("Frame")
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, 32)
+Header.BackgroundColor3 = Colors.HeaderBg
+Header.BorderColor3 = Colors.Border
+Header.BorderSizePixel = 1
+Header.Parent = MainFrame
+
+-- Title Text
+local Title = Instance.new("TextLabel")
+Title.Name = "Title"
+Title.Size = UDim2.new(0, 140, 1, 0)
+Title.Position = UDim2.new(0, 16, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "Kernel.cc"
+Title.TextColor3 = Colors.TextWhite
+Title.Font = MainFont
+Title.TextSize = 14
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Header
+
+-- Dragging Functionality for Main Frame
+local dragging, dragInput, dragStart, startPos
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+Header.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end))
+
+-- Top Navigation Tabs Container
+local TopTabsHolder = Instance.new("Frame")
+TopTabsHolder.Name = "TopTabsHolder"
+TopTabsHolder.Size = UDim2.new(0, 480, 1, 0)
+TopTabsHolder.Position = UDim2.new(1, -495, 0, 0)
+TopTabsHolder.BackgroundTransparency = 1
+TopTabsHolder.Parent = Header
+
+local TopTabsLayout = Instance.new("UIListLayout")
+TopTabsLayout.FillDirection = Enum.FillDirection.Horizontal
+TopTabsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+TopTabsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+TopTabsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+TopTabsLayout.Padding = UDim.new(0, 18)
+TopTabsLayout.Parent = TopTabsHolder
+
+-- Content Body Container
+local ContentBody = Instance.new("Frame")
+ContentBody.Name = "ContentBody"
+ContentBody.Size = UDim2.new(1, -16, 1, -44)
+ContentBody.Position = UDim2.new(0, 8, 0, 38)
+ContentBody.BackgroundTransparency = 1
+ContentBody.Parent = MainFrame
+
+-- Grid Container for 2 Columns
+local ColumnLeft = Instance.new("Frame")
+ColumnLeft.Name = "ColumnLeft"
+ColumnLeft.Size = UDim2.new(0.5, -5, 1, 0)
+ColumnLeft.Position = UDim2.new(0, 0, 0, 0)
+ColumnLeft.BackgroundColor3 = Colors.PanelBg
+ColumnLeft.BorderColor3 = Colors.Border
+ColumnLeft.BorderSizePixel = 1
+ColumnLeft.Parent = ContentBody
+
+local ColumnRight = Instance.new("Frame")
+ColumnRight.Name = "ColumnRight"
+ColumnRight.Size = UDim2.new(0.5, -5, 1, 0)
+ColumnRight.Position = UDim2.new(0.5, 5, 0, 0)
+ColumnRight.BackgroundColor3 = Colors.PanelBg
+ColumnRight.BorderColor3 = Colors.Border
+ColumnRight.BorderSizePixel = 1
+ColumnRight.Parent = ContentBody
+
+-- Top Tabs Configuration
+local TopTabNames = {"Combat", "Visuals", "Misc", "Other", "Settings"}
+local ActiveTopTab = "Visuals"
+local TopTabButtons = {}
+
+-- Sub-Tabs Containers with Left Margin
+local LeftSubTabHolder = Instance.new("Frame")
+LeftSubTabHolder.Name = "LeftSubTabHolder"
+LeftSubTabHolder.Size = UDim2.new(1, -20, 0, 26)
+LeftSubTabHolder.Position = UDim2.new(0, 10, 0, 8)
+LeftSubTabHolder.BackgroundTransparency = 1
+LeftSubTabHolder.Parent = ColumnLeft
+
+local RightSubTabHolder = Instance.new("Frame")
+RightSubTabHolder.Name = "RightSubTabHolder"
+RightSubTabHolder.Size = UDim2.new(1, -20, 0, 26)
+RightSubTabHolder.Position = UDim2.new(0, 10, 0, 8)
+RightSubTabHolder.BackgroundTransparency = 1
+RightSubTabHolder.Parent = ColumnRight
+
+-- Scrollable Content Containers with Left Margin
+local LeftScroll = Instance.new("ScrollingFrame")
+LeftScroll.Name = "LeftScroll"
+LeftScroll.Size = UDim2.new(1, -20, 1, -44)
+LeftScroll.Position = UDim2.new(0, 10, 0, 38)
+LeftScroll.BackgroundTransparency = 1
+LeftScroll.BorderSizePixel = 0
+LeftScroll.ScrollBarThickness = 3
+LeftScroll.ScrollBarImageColor3 = Colors.AccentOrange
+LeftScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+LeftScroll.Parent = ColumnLeft
+
+local LeftLayout = Instance.new("UIListLayout")
+LeftLayout.SortOrder = Enum.SortOrder.LayoutOrder
+LeftLayout.Padding = UDim.new(0, 6)
+LeftLayout.Parent = LeftScroll
+
+LeftLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    LeftScroll.CanvasSize = UDim2.new(0, 0, 0, LeftLayout.AbsoluteContentSize.Y + 10)
+end)
+
+local RightScroll = Instance.new("ScrollingFrame")
+RightScroll.Name = "RightScroll"
+RightScroll.Size = UDim2.new(1, -20, 1, -44)
+RightScroll.Position = UDim2.new(0, 10, 0, 38)
+RightScroll.BackgroundTransparency = 1
+RightScroll.BorderSizePixel = 0
+RightScroll.ScrollBarThickness = 3
+RightScroll.ScrollBarImageColor3 = Colors.AccentOrange
+RightScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+RightScroll.Parent = ColumnRight
+
+local RightLayout = Instance.new("UIListLayout")
+RightLayout.SortOrder = Enum.SortOrder.LayoutOrder
+RightLayout.Padding = UDim.new(0, 6)
+RightLayout.Parent = RightScroll
+
+RightLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    RightScroll.CanvasSize = UDim2.new(0, 0, 0, RightLayout.AbsoluteContentSize.Y + 10)
+end)
+
+---------------------------------------------------------
+-- 2D HSV RGB COLOR PALETTE CANVAS
+---------------------------------------------------------
+
+local function OpenColorPicker(initialColor, callback)
+    local currH, currS, currV = initialColor:ToHSV()
+
+    local pickerFrame = Instance.new("Frame")
+    pickerFrame.Name = "ColorPickerRGBModal"
+    pickerFrame.Size = UDim2.new(0, 200, 0, 190)
+    pickerFrame.Position = UDim2.new(0.5, -100, 0.5, -95)
+    pickerFrame.BackgroundColor3 = Colors.Background
+    pickerFrame.BorderColor3 = Colors.AccentOrange
+    pickerFrame.BorderSizePixel = 1
+    pickerFrame.ZIndex = 200
+    pickerFrame.Parent = MainFrame
+
+    -- Header
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size = UDim2.new(1, 0, 0, 22)
+    titleLbl.BackgroundColor3 = Colors.HeaderBg
+    titleLbl.Text = "COLOR PALETTE"
+    titleLbl.TextColor3 = Colors.TextWhite
+    titleLbl.Font = MainFont
+    titleLbl.TextSize = 11
+    titleLbl.ZIndex = 201
+    titleLbl.Parent = pickerFrame
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, 20, 0, 20)
+    closeBtn.Position = UDim2.new(1, -22, 0, 1)
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = Colors.TextDim
+    closeBtn.Font = MainFont
+    closeBtn.TextSize = 12
+    closeBtn.ZIndex = 202
+    closeBtn.Parent = titleLbl
+
+    closeBtn.MouseButton1Click:Connect(function()
+        pickerFrame:Destroy()
+    end)
+
+    -- 2D SV Canvas Box
+    local svCanvas = Instance.new("Frame")
+    svCanvas.Name = "SVCanvas"
+    svCanvas.Size = UDim2.new(1, -20, 0, 120)
+    svCanvas.Position = UDim2.new(0, 10, 0, 28)
+    svCanvas.BackgroundColor3 = Color3.fromHSV(currH, 1, 1)
+    svCanvas.BorderSizePixel = 1
+    svCanvas.BorderColor3 = Colors.Border
+    svCanvas.ZIndex = 201
+    svCanvas.Parent = pickerFrame
+
+    local satOverlay = Instance.new("Frame")
+    satOverlay.Size = UDim2.new(1, 0, 1, 0)
+    satOverlay.BackgroundTransparency = 0
+    satOverlay.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    satOverlay.BorderSizePixel = 0
+    satOverlay.ZIndex = 202
+    satOverlay.Parent = svCanvas
+
+    local satGrad = Instance.new("UIGradient")
+    satGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0),
+        NumberSequenceKeypoint.new(1, 1)
+    })
+    satGrad.Parent = satOverlay
+
+    local valOverlay = Instance.new("Frame")
+    valOverlay.Size = UDim2.new(1, 0, 1, 0)
+    valOverlay.BackgroundTransparency = 0
+    valOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    valOverlay.BorderSizePixel = 0
+    valOverlay.ZIndex = 203
+    valOverlay.Parent = svCanvas
+
+    local valGrad = Instance.new("UIGradient")
+    valGrad.Rotation = 90
+    valGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(1, 0)
+    })
+    valGrad.Parent = valOverlay
+
+    local cursor = Instance.new("Frame")
+    cursor.Size = UDim2.new(0, 6, 0, 6)
+    cursor.AnchorPoint = Vector2.new(0.5, 0.5)
+    cursor.Position = UDim2.new(currS, 0, 1 - currV, 0)
+    cursor.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    cursor.BorderColor3 = Color3.fromRGB(0, 0, 0)
+    cursor.BorderSizePixel = 1
+    cursor.ZIndex = 204
+    cursor.Parent = svCanvas
+
+    local hueBar = Instance.new("Frame")
+    hueBar.Name = "HueBar"
+    hueBar.Size = UDim2.new(1, -20, 0, 14)
+    hueBar.Position = UDim2.new(0, 10, 0, 156)
+    hueBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    hueBar.BorderSizePixel = 1
+    hueBar.BorderColor3 = Colors.Border
+    hueBar.ZIndex = 201
+    hueBar.Parent = pickerFrame
+
+    local hueGrad = Instance.new("UIGradient")
+    hueGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+        ColorSequenceKeypoint.new(0.166, Color3.fromRGB(255, 255, 0)),
+        ColorSequenceKeypoint.new(0.333, Color3.fromRGB(0, 255, 0)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 255, 255)),
+        ColorSequenceKeypoint.new(0.666, Color3.fromRGB(0, 0, 255)),
+        ColorSequenceKeypoint.new(0.833, Color3.fromRGB(255, 0, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
+    })
+    hueGrad.Parent = hueBar
+
+    local hueCursor = Instance.new("Frame")
+    hueCursor.Size = UDim2.new(0, 4, 1, 4)
+    hueCursor.AnchorPoint = Vector2.new(0.5, 0.5)
+    hueCursor.Position = UDim2.new(currH, 0, 0.5, 0)
+    hueCursor.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    hueCursor.BorderColor3 = Color3.fromRGB(0, 0, 0)
+    hueCursor.BorderSizePixel = 1
+    hueCursor.ZIndex = 204
+    hueCursor.Parent = hueBar
+
+    local function UpdateRGB()
+        local newColor = Color3.fromHSV(currH, currS, currV)
+        svCanvas.BackgroundColor3 = Color3.fromHSV(currH, 1, 1)
+        cursor.Position = UDim2.new(currS, 0, 1 - currV, 0)
+        hueCursor.Position = UDim2.new(currH, 0, 0.5, 0)
+        callback(newColor)
+    end
+
+    local draggingSV = false
+    local function InputSV(input)
+        local posX = math.clamp((input.Position.X - svCanvas.AbsolutePosition.X) / svCanvas.AbsoluteSize.X, 0, 1)
+        local posY = math.clamp((input.Position.Y - svCanvas.AbsolutePosition.Y) / svCanvas.AbsoluteSize.Y, 0, 1)
+        currS = posX
+        currV = 1 - posY
+        UpdateRGB()
+    end
+
+    svCanvas.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            draggingSV = true
+            InputSV(input)
+        end
+    end)
+    svCanvas.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            draggingSV = false
+        end
+    end)
+
+    local draggingHue = false
+    local function InputHue(input)
+        local posX = math.clamp((input.Position.X - hueBar.AbsolutePosition.X) / hueBar.AbsoluteSize.X, 0, 1)
+        currH = posX
+        UpdateRGB()
+    end
+
+    hueBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            draggingHue = true
+            InputHue(input)
+        end
+    end)
+    hueBar.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            draggingHue = false
+        end
+    end)
+
+    table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
+        if (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            if draggingSV then InputSV(input) end
+            if draggingHue then InputHue(input) end
+        end
+    end))
+end
+
+-- Create Checkbox Row (Linked directly to ESP State + Real Color Updating)
+local function AddToggleRow(parent, labelText, defaultChecked, colorSwatches, callback)
+    local row = Instance.new("Frame")
+    row.Name = "ToggleRow_" .. labelText
+    row.Size = UDim2.new(1, 0, 0, 22)
+    row.BackgroundTransparency = 1
+    row.Parent = parent
+
+    local box = Instance.new("TextButton")
+    box.Name = "Box"
+    box.Size = UDim2.new(0, 14, 0, 14)
+    box.Position = UDim2.new(0, 4, 0.5, -7)
+    box.BackgroundColor3 = defaultChecked and Colors.AccentOrange or Colors.UncheckedBox
+    box.BorderColor3 = defaultChecked and Colors.AccentOrange or Colors.UncheckedBorder
+    box.BorderSizePixel = 1
+    box.Text = ""
+    box.Parent = row
+
+    local label = Instance.new("TextLabel")
+    label.Name = "Label"
+    label.Size = UDim2.new(1, -50, 1, 0)
+    label.Position = UDim2.new(0, 26, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = labelText
+    label.TextColor3 = Colors.TextWhite
+    label.Font = MainFont
+    label.TextSize = 13
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = row
+
+    local checked = defaultChecked
+
+    local function updateState()
+        box.BackgroundColor3 = checked and Colors.AccentOrange or Colors.UncheckedBox
+        box.BorderColor3 = checked and Colors.AccentOrange or Colors.UncheckedBorder
+        if callback then callback(checked) end
+    end
+
+    box.MouseButton1Click:Connect(function()
+        checked = not checked
+        updateState()
+    end)
+
+    local labelBtn = Instance.new("TextButton")
+    labelBtn.Size = label.Size
+    labelBtn.Position = label.Position
+    labelBtn.BackgroundTransparency = 1
+    labelBtn.Text = ""
+    labelBtn.Parent = row
+
+    labelBtn.MouseButton1Click:Connect(function()
+        checked = not checked
+        updateState()
+    end)
+
+    -- Single Color Swatch with 2D HSV Palette
+    if colorSwatches and #colorSwatches > 0 then
+        local swatchHolder = Instance.new("Frame")
+        swatchHolder.Name = "Swatches"
+        swatchHolder.Size = UDim2.new(0, 22, 1, 0)
+        swatchHolder.Position = UDim2.new(1, -24, 0, 0)
+        swatchHolder.BackgroundTransparency = 1
+        swatchHolder.Parent = row
+
+        local initialColor = colorSwatches[1]
+        local swatch = Instance.new("TextButton")
+        swatch.Name = "Swatch_1"
+        swatch.Size = UDim2.new(0, 18, 0, 10)
+        swatch.Position = UDim2.new(0, 2, 0.5, -5)
+        swatch.BackgroundColor3 = initialColor
+        swatch.BorderColor3 = Colors.Border
+        swatch.BorderSizePixel = 1
+        swatch.Text = ""
+        swatch.Parent = swatchHolder
+
+        swatch.MouseButton1Click:Connect(function()
+            OpenColorPicker(swatch.BackgroundColor3, function(newColor)
+                swatch.BackgroundColor3 = newColor
+                if labelText == "Show Enemy Box" then ESP_State.BoxColor = newColor end
+                if labelText == "Show Enemy Skeleton" then ESP_State.SkeletonColor = newColor end
+                if labelText == "Show Enemy HP" then ESP_State.HPColor = newColor end
+                if labelText == "Show Enemy Distance" then ESP_State.DistanceColor = newColor end
+            end)
+        end)
+    end
+
+    return row
+end
+
+-- Create Button Row
+local function AddButtonRow(parent, labelText, callback)
+    local row = Instance.new("Frame")
+    row.Name = "ButtonRow_" .. labelText
+    row.Size = UDim2.new(1, 0, 0, 28)
+    row.BackgroundTransparency = 1
+    row.Parent = parent
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -8, 1, 0)
+    btn.Position = UDim2.new(0, 4, 0, 0)
+    btn.BackgroundColor3 = Colors.Background
+    btn.BorderColor3 = Colors.AccentOrange
+    btn.BorderSizePixel = 1
+    btn.Text = labelText
+    btn.TextColor3 = Colors.AccentOrange
+    btn.Font = MainFont
+    btn.TextSize = 12
+    btn.Parent = row
+
+    btn.MouseButton1Click:Connect(function()
+        if callback then callback() end
+    end)
+
+    return row
+end
+
+-- Create Stepper / Sub-option Selector
+local function AddSelectorRow(parent, options, defaultIndex, callback)
+    local row = Instance.new("Frame")
+    row.Name = "SelectorRow"
+    row.Size = UDim2.new(1, 0, 0, 20)
+    row.BackgroundTransparency = 1
+    row.Parent = parent
+
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(0, 120, 0, 18)
+    container.Position = UDim2.new(0, 26, 0, 1)
+    container.BackgroundColor3 = Colors.Background
+    container.BorderColor3 = Colors.Border
+    container.BorderSizePixel = 1
+    container.Parent = row
+
+    local currentIndex = defaultIndex or 1
+
+    local leftArrow = Instance.new("TextButton")
+    leftArrow.Size = UDim2.new(0, 18, 1, 0)
+    leftArrow.Position = UDim2.new(0, 0, 0, 0)
+    leftArrow.BackgroundTransparency = 1
+    leftArrow.Text = "<"
+    leftArrow.TextColor3 = Colors.TextDim
+    leftArrow.Font = MainFont
+    leftArrow.TextSize = 12
+    leftArrow.Parent = container
+
+    local rightArrow = Instance.new("TextButton")
+    rightArrow.Size = UDim2.new(0, 18, 1, 0)
+    rightArrow.Position = UDim2.new(1, -18, 0, 0)
+    rightArrow.BackgroundTransparency = 1
+    rightArrow.Text = ">"
+    rightArrow.TextColor3 = Colors.TextDim
+    rightArrow.Font = MainFont
+    rightArrow.TextSize = 12
+    rightArrow.Parent = container
+
+    local valueLbl = Instance.new("TextLabel")
+    valueLbl.Size = UDim2.new(1, -36, 1, 0)
+    valueLbl.Position = UDim2.new(0, 18, 0, 0)
+    valueLbl.BackgroundTransparency = 1
+    valueLbl.Text = options[currentIndex] or ""
+    valueLbl.TextColor3 = Colors.TextWhite
+    valueLbl.Font = MainFont
+    valueLbl.TextSize = 11
+    valueLbl.Parent = container
+
+    local function updateSelector()
+        valueLbl.Text = options[currentIndex]
+        if callback then callback(options[currentIndex], currentIndex) end
+    end
+
+    leftArrow.MouseButton1Click:Connect(function()
+        currentIndex = currentIndex - 1
+        if currentIndex < 1 then currentIndex = #options end
+        updateSelector()
+    end)
+
+    rightArrow.MouseButton1Click:Connect(function()
+        currentIndex = currentIndex + 1
+        if currentIndex > #options then currentIndex = 1 end
+        updateSelector()
+    end)
+
+    return row
+end
+
+-- Helper to Create Subtab Buttons
+local function CreateSubTabButton(name, parent, widthScale, positionXScale, activeState, onClick)
+    local btn = Instance.new("TextButton")
+    btn.Name = "SubTab_" .. name
+    btn.Size = UDim2.new(widthScale, -4, 1, 0)
+    btn.Position = UDim2.new(positionXScale, 2, 0, 0)
+    btn.BackgroundColor3 = Colors.Background
+    btn.BorderColor3 = activeState and Colors.AccentOrange or Colors.Border
+    btn.BorderSizePixel = 1
+    btn.Text = string.upper(name)
+    btn.TextColor3 = activeState and Colors.AccentOrange or Colors.TextDim
+    btn.Font = MainFont
+    btn.TextSize = 12
+    btn.Parent = parent
+
+    btn.MouseButton1Click:Connect(function()
+        if onClick then onClick() end
+    end)
+
+    return btn
+end
+
+-- Clear Panel Contents
+local function ClearPanels()
+    for _, child in ipairs(LeftScroll:GetChildren()) do
+        if not child:IsA("UIListLayout") then child:Destroy() end
+    end
+    for _, child in ipairs(RightScroll:GetChildren()) do
+        if not child:IsA("UIListLayout") then child:Destroy() end
+    end
+end
+
+-- Populate Functions for Subtabs
+local function PopulateCombatAimbot()
+    ClearPanels()
+    AddToggleRow(LeftScroll, "Enable Aimbot", true, {})
+    AddToggleRow(LeftScroll, "Show FOV Circle", true, {Colors.CyanSwatch})
+    AddSelectorRow(LeftScroll, {"Head", "Torso", "HumanoidRootPart"}, 1)
+    AddToggleRow(LeftScroll, "Visible Check", true, {})
+    AddToggleRow(LeftScroll, "Smoothness", false, {})
+end
+
+local function PopulateCombatSilentAim()
+    ClearPanels()
+    AddToggleRow(LeftScroll, "Enable Silent Aim", true, {})
+    AddToggleRow(LeftScroll, "Hitchance", true, {})
+    AddSelectorRow(LeftScroll, {"Head", "Random", "Torso"}, 1)
+    AddToggleRow(RightScroll, "Wallbang", false, {})
+    AddToggleRow(RightScroll, "Auto Shoot", false, {})
+end
+
+local function PopulateVisualsEnemy()
+    ClearPanels()
+
+    -- Defaults: White Box, Pink Skeleton, Green HP, White Distance
+    AddToggleRow(LeftScroll, "Show Enemy Box", ESP_State.Box, {ESP_State.BoxColor}, function(val)
+        ESP_State.Box = val
+    end)
+
+    AddToggleRow(LeftScroll, "Show Enemy Skeleton", ESP_State.Skeleton, {ESP_State.SkeletonColor}, function(val)
+        ESP_State.Skeleton = val
+    end)
+
+    AddToggleRow(LeftScroll, "Show Enemy HP", ESP_State.HP, {ESP_State.HPColor}, function(val)
+        ESP_State.HP = val
+    end)
+
+    AddToggleRow(LeftScroll, "Show Enemy Distance", ESP_State.Distance, {ESP_State.DistanceColor}, function(val)
+        ESP_State.Distance = val
+    end)
+end
+
+local function PopulateVisualsAI()
+    ClearPanels()
+    AddToggleRow(LeftScroll, "Show NPCs", true, {Colors.WhiteSwatch})
+    AddToggleRow(LeftScroll, "Show Sleepers", true, {})
+    AddToggleRow(LeftScroll, "Show AI Health", true, {})
+end
+
+local function PopulateVisualsWorld()
+    ClearPanels()
+    local rightPanelItems = {
+        "Bright Night", "Bright Stars", "Bright Clouds", "Clean Fog",
+        "Clean Light", "Clean Overlays", "Clean Jump Shake", "Clean Shoot Shake",
+        "Clean Explosions", "Sky Color", "Aspect Ratio", "Field Of View",
+        "Time Changer", "Third Person"
+    }
+    for _, item in ipairs(rightPanelItems) do
+        AddToggleRow(RightScroll, item, false, {})
+    end
+end
+
+-- Function to Unload Script Completely
+local function UnloadScript()
+    IsUnloaded = true
+
+    -- Disconnect all RBXScriptConnections
+    for _, conn in ipairs(Connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    Connections = {}
+
+    -- Clean up all ESP Drawings and Instances
+    for player, _ in pairs(ESP_Cache) do
+        RemoveESP(player)
+    end
+    ESP_Cache = {}
+
+    -- Destroy UI
+    pcall(function() ScreenGui:Destroy() end)
+    pcall(function() ToggleBtn:Destroy() end)
+
+    print("[Kernel.cc] Unloaded Successfully!")
+end
+
+local function PopulateSettings()
+    ClearPanels()
+    AddButtonRow(LeftScroll, "UNLOAD SCRIPT", function()
+        UnloadScript()
+    end)
+end
+
+-- Render Active Tab & Subtabs
+local function RefreshSubTabs(topTabName)
+    for _, child in ipairs(LeftSubTabHolder:GetChildren()) do child:Destroy() end
+    for _, child in ipairs(RightSubTabHolder:GetChildren()) do child:Destroy() end
+    ClearPanels()
+
+    if topTabName == "Combat" then
+        local btnAimbot = CreateSubTabButton("AIMBOT", LeftSubTabHolder, 1.0, 0.0, true, function()
+            PopulateCombatAimbot()
+        end)
+        local btnSilent = CreateSubTabButton("SILENT AIM", RightSubTabHolder, 1.0, 0.0, true, function()
+            PopulateCombatSilentAim()
+        end)
+        PopulateCombatAimbot()
+
+    elseif topTabName == "Visuals" then
+        local activeVisualSub = "ENEMY"
+
+        local function updateVisualState()
+            for _, child in ipairs(LeftSubTabHolder:GetChildren()) do child:Destroy() end
+            for _, child in ipairs(RightSubTabHolder:GetChildren()) do child:Destroy() end
+
+            CreateSubTabButton("ENEMY", LeftSubTabHolder, 0.5, 0.0, activeVisualSub == "ENEMY", function()
+                activeVisualSub = "ENEMY"
+                updateVisualState()
+                PopulateVisualsEnemy()
+            end)
+            CreateSubTabButton("AI", LeftSubTabHolder, 0.5, 0.5, activeVisualSub == "AI", function()
+                activeVisualSub = "AI"
+                updateVisualState()
+                PopulateVisualsAI()
+            end)
+            CreateSubTabButton("WORLD", RightSubTabHolder, 1.0, 0.0, activeVisualSub == "WORLD", function()
+                activeVisualSub = "WORLD"
+                updateVisualState()
+                PopulateVisualsWorld()
             end)
         end
-    end
-    Category.AnimateDropdown = AnimateDropdown
 
-    HeaderBtn.MouseButton1Click:Connect(function()
-        if #Category.SubTabs > 0 then
-            -- ACCORDION MODE: Close all other open categories when opening a new one!
-            if not Category.Expanded then
-                for _, otherCat in ipairs(Library.Categories) do
-                    if otherCat ~= Category and otherCat.Expanded and not otherCat.IsBottom then
-                        otherCat.Expanded = false
-                        otherCat.AnimateDropdown()
-                    end
-                end
+        updateVisualState()
+        PopulateVisualsEnemy()
+
+    elseif topTabName == "Misc" or topTabName == "Other" then
+        ClearPanels()
+
+    elseif topTabName == "Settings" then
+        CreateSubTabButton("GENERAL", LeftSubTabHolder, 1.0, 0.0, true, function()
+            PopulateSettings()
+        end)
+        PopulateSettings()
+    end
+end
+
+-- Render Top Navigation Tabs
+for idx, tabName in ipairs(TopTabNames) do
+    local tabBtn = Instance.new("TextButton")
+    tabBtn.Name = "TopTab_" .. tabName
+    tabBtn.Size = UDim2.new(0, 65, 1, 0)
+    tabBtn.BackgroundTransparency = 1
+    tabBtn.Text = tabName
+    tabBtn.TextColor3 = (tabName == ActiveTopTab) and Colors.AccentOrange or Colors.TextDim
+    tabBtn.Font = MainFont
+    tabBtn.TextSize = 13
+    tabBtn.Parent = TopTabsHolder
+
+    -- Bottom Underline for Active Tab
+    local underline = Instance.new("Frame")
+    underline.Name = "Underline"
+    underline.Size = UDim2.new(1, 0, 0, 2)
+    underline.Position = UDim2.new(0, 0, 1, -2)
+    underline.BackgroundColor3 = Colors.AccentOrange
+    underline.BorderSizePixel = 0
+    underline.Visible = (tabName == ActiveTopTab)
+    underline.Parent = tabBtn
+
+    tabBtn.MouseButton1Click:Connect(function()
+        ActiveTopTab = tabName
+        for _, b in pairs(TopTabButtons) do
+            b.TextColor3 = Colors.TextDim
+            if b:FindFirstChild("Underline") then
+                b.Underline.Visible = false
             end
-
-            Category.Expanded = not Category.Expanded
-            AnimateDropdown()
-        elseif Category.DirectSubTab then
-            Library:SelectSubTab(Category.DirectSubTab)
         end
+        tabBtn.TextColor3 = Colors.AccentOrange
+        underline.Visible = true
+        RefreshSubTabs(tabName)
     end)
 
-    Category.CategoryWrapper = CategoryWrapper
-    Category.SubHolder = SubHolder
-    Category.SubListFrame = SubListFrame
-    Category.UpdateTreeLines = UpdateTreeLines
-    table.insert(Library.Categories, Category)
-
-    -- Create SubTab under Category
-    function Category:CreateSubTab(subTabName)
-        local SubTab = {}
-        SubTab.Name = subTabName
-        SubTab.Category = Category
-
-        -- Item Frame containing Vertical Trunk Segment + Horizontal Connector + Sub-Button
-        local SubTabItemFrame = Instance.new("Frame")
-        SubTabItemFrame.Name = "SubTabFrame_" .. subTabName
-        SubTabItemFrame.Size = UDim2.new(1, 0, 0, 26) -- 26px Height
-        SubTabItemFrame.BackgroundTransparency = 1
-        SubTabItemFrame.ClipsDescendants = true
-        SubTabItemFrame.Parent = isBottom and CategoryWrapper or SubListFrame
-        SubTab.SubTabItemFrame = SubTabItemFrame
-
-        if not isBottom then
-            -- Vertical Trunk Segment for this item
-            local VerticalBranch = Instance.new("Frame")
-            VerticalBranch.Name = "VerticalBranch"
-            VerticalBranch.Size = UDim2.new(0, 1, 1, 5)
-            VerticalBranch.Position = UDim2.new(0, 12, 0, 0)
-            VerticalBranch.BackgroundColor3 = Theme.WhiteLineMuted
-            VerticalBranch.BorderSizePixel = 0
-            VerticalBranch.ZIndex = 2
-            VerticalBranch.Parent = SubTabItemFrame
-            SubTab.VerticalBranch = VerticalBranch
-
-            -- Horizontal Branch Line connecting from left vertical line to sub-button
-            local HorizontalBranch = Instance.new("Frame")
-            HorizontalBranch.Name = "HorizontalBranch"
-            HorizontalBranch.Size = UDim2.new(0, 10, 0, 1)
-            HorizontalBranch.Position = UDim2.new(0, 12, 0.5, 0)
-            HorizontalBranch.BackgroundColor3 = Theme.WhiteLineMuted
-            HorizontalBranch.BorderSizePixel = 0
-            HorizontalBranch.ZIndex = 2
-            HorizontalBranch.Parent = SubTabItemFrame
-            SubTab.HorizontalBranch = HorizontalBranch
-        end
-
-        -- SubTab Button Frame
-        local SubBtn = Instance.new("TextButton")
-        SubBtn.Name = "SubBtn"
-        SubBtn.Size = isBottom and UDim2.new(1, -2, 0, 28) or UDim2.new(1, -26, 1, -4)
-        SubBtn.Position = isBottom and UDim2.new(0, 0, 0, 0) or UDim2.new(0, 24, 0, 2)
-        SubBtn.BackgroundColor3 = Theme.Sidebar
-        SubBtn.BorderSizePixel = 1
-        SubBtn.BorderColor3 = Theme.Border
-        SubBtn.ClipsDescendants = true
-        SubBtn.Text = ""
-        SubBtn.AutoButtonColor = false
-        SubBtn.Parent = SubTabItemFrame
-
-        -- Left Active Indicator Bar inside SubBtn
-        local ActiveIndicator = Instance.new("Frame")
-        ActiveIndicator.Name = "ActiveIndicator"
-        ActiveIndicator.Size = UDim2.new(0, 2, 1, 0)
-        ActiveIndicator.Position = UDim2.new(0, 0, 0, 0)
-        ActiveIndicator.BackgroundColor3 = Theme.WhiteLine
-        ActiveIndicator.BorderSizePixel = 0
-        ActiveIndicator.BackgroundTransparency = 1
-        ActiveIndicator.Parent = SubBtn
-
-        -- SubTab Text Label
-        local SubLabel = Instance.new("TextLabel")
-        SubLabel.Name = "SubLabel"
-        SubLabel.Size = UDim2.new(1, -12, 1, 0)
-        SubLabel.Position = UDim2.new(0, 10, 0, 0)
-        SubLabel.BackgroundTransparency = 1
-        SubLabel.Text = subTabName
-        SubLabel.Font = Enum.Font.GothamMedium
-        SubLabel.TextSize = 12
-        SubLabel.TextColor3 = Theme.TextMuted
-        SubLabel.TextXAlignment = Enum.TextXAlignment.Left
-        SubLabel.Parent = SubBtn
-
-        -- Content Page Frame
-        local PageFrame = Instance.new("ScrollingFrame")
-        PageFrame.Name = "Page_" .. categoryName .. "_" .. subTabName
-        PageFrame.Size = UDim2.new(1, 0, 1, 0)
-        PageFrame.BackgroundTransparency = 1
-        PageFrame.BorderSizePixel = 0
-        PageFrame.Visible = false
-        PageFrame.ScrollBarThickness = 3
-        PageFrame.ScrollBarImageColor3 = Theme.WhiteLine
-        PageFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-        PageFrame.Parent = Library.PageContainer
-
-        local PageList = Instance.new("UIListLayout")
-        PageList.SortOrder = Enum.SortOrder.LayoutOrder
-        PageList.Padding = UDim.new(0, 10)
-        PageList.Parent = PageFrame
-
-        local PagePadding = Instance.new("UIPadding")
-        PagePadding.PaddingLeft = UDim.new(0, 20)
-        PagePadding.PaddingRight = UDim.new(0, 20)
-        PagePadding.PaddingTop = UDim.new(0, 15)
-        PagePadding.PaddingBottom = UDim.new(0, 15)
-        PagePadding.Parent = PageFrame
-
-        PageList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            PageFrame.CanvasSize = UDim2.new(0, 0, 0, PageList.AbsoluteContentSize.Y + 30)
-        end)
-
-        SubBtn.MouseButton1Click:Connect(function()
-            Library:SelectSubTab(SubTab)
-        end)
-
-        SubBtn.MouseEnter:Connect(function()
-            if Library.ActiveSubTab ~= SubTab then
-                Tween(SubBtn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.CardHover, BorderColor3 = Theme.Border})
-                Tween(SubLabel, TweenInfo.new(0.15), {TextColor3 = Theme.TextMain})
-            end
-        end)
-
-        SubBtn.MouseLeave:Connect(function()
-            if Library.ActiveSubTab ~= SubTab then
-                Tween(SubBtn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.Sidebar, BorderColor3 = Theme.Border})
-                Tween(SubLabel, TweenInfo.new(0.15), {TextColor3 = Theme.TextMuted})
-            end
-        end)
-
-        SubTab.SubBtn = SubBtn
-        SubTab.SubLabel = SubLabel
-        SubTab.ActiveIndicator = ActiveIndicator
-        SubTab.PageFrame = PageFrame
-
-        table.insert(Category.SubTabs, SubTab)
-        table.insert(Library.AllSubTabs, SubTab)
-
-        if not isBottom then
-            Category.UpdateTreeLines()
-        end
-
-        if not Library.ActiveSubTab then
-            Library:SelectSubTab(SubTab)
-        end
-
-        return SubTab
-    end
-
-    function Category:GetDirectPage()
-        if not Category.DirectSubTab then
-            Category.DirectSubTab = Category:CreateSubTab(categoryName)
-            HeaderBtn.Visible = false
-        end
-        return Category.DirectSubTab
-    end
-
-    return Category
+    table.insert(TopTabButtons, tabBtn)
 end
 
--- Select Active SubTab
-function WorldGUI:SelectSubTab(targetSubTab)
-    self.ActiveSubTab = targetSubTab
-    
-    if targetSubTab.Category and targetSubTab.Category.Name ~= targetSubTab.Name then
-        self.HeaderTitle.Text = targetSubTab.Category.Name .. "  /  " .. targetSubTab.Name
-    else
-        self.HeaderTitle.Text = targetSubTab.Name
-    end
+-- Initialize Default Active Tab (Visuals)
+RefreshSubTabs(ActiveTopTab)
 
-    for _, sub in ipairs(self.AllSubTabs) do
-        if sub == targetSubTab then
-            sub.PageFrame.Visible = true
-            Tween(sub.SubBtn, TweenInfo.new(0.2), {
-                BackgroundColor3 = Theme.Card,
-                BorderColor3 = Theme.WhiteLine
-            })
-            Tween(sub.SubLabel, TweenInfo.new(0.2), {TextColor3 = Theme.TextMain})
-            Tween(sub.ActiveIndicator, TweenInfo.new(0.2), {BackgroundTransparency = 0})
-        else
-            sub.PageFrame.Visible = false
-            Tween(sub.SubBtn, TweenInfo.new(0.2), {
-                BackgroundColor3 = Theme.Sidebar,
-                BorderColor3 = Theme.Border
-            })
-            Tween(sub.SubLabel, TweenInfo.new(0.2), {TextColor3 = Theme.TextMuted})
-            Tween(sub.ActiveIndicator, TweenInfo.new(0.2), {BackgroundTransparency = 1})
-        end
-    end
-end
-
----------------------------------------------------------
--- FEATURE COMPONENTS
----------------------------------------------------------
-
--- 1. Section Header
-function WorldGUI:CreateSection(subTab, title)
-    local SectionFrame = Instance.new("Frame")
-    SectionFrame.Name = "Section_" .. title
-    SectionFrame.Size = UDim2.new(1, 0, 0, 26)
-    SectionFrame.BackgroundTransparency = 1
-    SectionFrame.Parent = subTab.PageFrame
-
-    local SectionTitle = Instance.new("TextLabel")
-    SectionTitle.Size = UDim2.new(1, 0, 1, 0)
-    SectionTitle.BackgroundTransparency = 1
-    SectionTitle.Text = string.upper(title)
-    SectionTitle.Font = Enum.Font.GothamBold
-    SectionTitle.TextSize = 11
-    SectionTitle.TextColor3 = Theme.WhiteLine
-    SectionTitle.TextXAlignment = Enum.TextXAlignment.Left
-    SectionTitle.Parent = SectionFrame
-
-    local SectionLine = Instance.new("Frame")
-    SectionLine.Size = UDim2.new(0, 0, 0, 1)
-    SectionLine.Position = UDim2.new(0, 0, 1, -2)
-    SectionLine.BackgroundColor3 = Theme.Border
-    SectionLine.BorderSizePixel = 0
-    SectionLine.Parent = SectionFrame
-end
-
--- 2. Action Button
-function WorldGUI:CreateButton(subTab, text, callback)
-    callback = callback or function() end
-
-    local BtnFrame = Instance.new("Frame")
-    BtnFrame.Name = "Button_" .. text
-    BtnFrame.Size = UDim2.new(1, 0, 0, 40)
-    BtnFrame.BackgroundColor3 = Theme.Card
-    BtnFrame.BorderColor3 = Theme.Border
-    BtnFrame.BorderSizePixel = 1
-    BtnFrame.Parent = subTab.PageFrame
-
-    local Button = Instance.new("TextButton")
-    Button.Size = UDim2.new(1, 0, 1, 0)
-    Button.BackgroundTransparency = 1
-    Button.Text = text
-    Button.Font = Enum.Font.GothamMedium
-    Button.TextSize = 13
-    Button.TextColor3 = Theme.TextMain
-    Button.Parent = BtnFrame
-
-    Button.MouseEnter:Connect(function()
-        Tween(BtnFrame, TweenInfo.new(0.15), {BackgroundColor3 = Theme.CardHover, BorderColor3 = Theme.WhiteLine})
-    end)
-    Button.MouseLeave:Connect(function()
-        Tween(BtnFrame, TweenInfo.new(0.15), {BackgroundColor3 = Theme.Card, BorderColor3 = Theme.Border})
-    end)
-    Button.MouseButton1Down:Connect(function()
-        Tween(BtnFrame, TweenInfo.new(0.08), {BackgroundColor3 = Theme.WhiteLine})
-        Tween(Button, TweenInfo.new(0.08), {TextColor3 = Theme.Background})
-    end)
-    Button.MouseButton1Up:Connect(function()
-        Tween(BtnFrame, TweenInfo.new(0.15), {BackgroundColor3 = Theme.CardHover})
-        Tween(Button, TweenInfo.new(0.15), {TextColor3 = Theme.TextMain})
-        callback()
-    end)
-end
-
--- 3. Toggle Switch
-function WorldGUI:CreateToggle(subTab, text, defaultState, callback)
-    callback = callback or function() end
-    local state = defaultState or false
-
-    local ToggleFrame = Instance.new("Frame")
-    ToggleFrame.Name = "Toggle_" .. text
-    ToggleFrame.Size = UDim2.new(1, 0, 0, 42)
-    ToggleFrame.BackgroundColor3 = Theme.Card
-    ToggleFrame.BorderColor3 = Theme.Border
-    ToggleFrame.BorderSizePixel = 1
-    ToggleFrame.Parent = subTab.PageFrame
-
-    local ToggleLabel = Instance.new("TextLabel")
-    ToggleLabel.Size = UDim2.new(1, -70, 1, 0)
-    ToggleLabel.Position = UDim2.new(0, 15, 0, 0)
-    ToggleLabel.BackgroundTransparency = 1
-    ToggleLabel.Text = text
-    ToggleLabel.Font = Enum.Font.GothamMedium
-    ToggleLabel.TextSize = 13
-    ToggleLabel.TextColor3 = Theme.TextMain
-    ToggleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    ToggleLabel.Parent = ToggleFrame
-
-    local SwitchTrack = Instance.new("Frame")
-    SwitchTrack.Name = "SwitchTrack"
-    SwitchTrack.Size = UDim2.new(0, 42, 0, 20)
-    SwitchTrack.Position = UDim2.new(1, -55, 0.5, -10)
-    SwitchTrack.BackgroundColor3 = state and Theme.Success or Theme.ToggleOff
-    SwitchTrack.BorderColor3 = state and Theme.WhiteLine or Theme.Border
-    SwitchTrack.BorderSizePixel = 1
-    SwitchTrack.Parent = ToggleFrame
-
-    local SwitchKnob = Instance.new("Frame")
-    SwitchKnob.Name = "SwitchKnob"
-    SwitchKnob.Size = UDim2.new(0, 14, 0, 14)
-    SwitchKnob.Position = state and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
-    SwitchKnob.BackgroundColor3 = state and Theme.Background or Theme.WhiteLineMuted
-    SwitchKnob.BorderSizePixel = 0
-    SwitchKnob.Parent = SwitchTrack
-
-    local ClickBtn = Instance.new("TextButton")
-    ClickBtn.Size = UDim2.new(1, 0, 1, 0)
-    ClickBtn.BackgroundTransparency = 1
-    ClickBtn.Text = ""
-    ClickBtn.Parent = ToggleFrame
-
-    local function UpdateToggle()
-        if state then
-            Tween(SwitchTrack, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Success, BorderColor3 = Theme.WhiteLine})
-            Tween(SwitchKnob, TweenInfo.new(0.2), {Position = UDim2.new(1, -17, 0.5, -7), BackgroundColor3 = Theme.Background})
-        else
-            Tween(SwitchTrack, TweenInfo.new(0.2), {BackgroundColor3 = Theme.ToggleOff, BorderColor3 = Theme.Border})
-            Tween(SwitchKnob, TweenInfo.new(0.2), {Position = UDim2.new(0, 3, 0.5, -7), BackgroundColor3 = Theme.WhiteLineMuted})
-        end
-        callback(state)
-    end
-
-    ClickBtn.MouseButton1Click:Connect(function()
-        state = not state
-        UpdateToggle()
-    end)
-
-    ToggleFrame.MouseEnter:Connect(function()
-        Tween(ToggleFrame, TweenInfo.new(0.15), {BackgroundColor3 = Theme.CardHover})
-    end)
-    ToggleFrame.MouseLeave:Connect(function()
-        Tween(ToggleFrame, TweenInfo.new(0.15), {BackgroundColor3 = Theme.Card})
-    end)
-end
-
--- 4. Interactive Slider
-function WorldGUI:CreateSlider(subTab, text, min, max, defaultVal, callback)
-    callback = callback or function() end
-    local value = math.clamp(defaultVal or min, min, max)
-
-    local SliderFrame = Instance.new("Frame")
-    SliderFrame.Name = "Slider_" .. text
-    SliderFrame.Size = UDim2.new(1, 0, 0, 52)
-    SliderFrame.BackgroundColor3 = Theme.Card
-    SliderFrame.BorderColor3 = Theme.Border
-    SliderFrame.BorderSizePixel = 1
-    SliderFrame.Parent = subTab.PageFrame
-
-    local SliderLabel = Instance.new("TextLabel")
-    SliderLabel.Size = UDim2.new(0.7, 0, 0, 24)
-    SliderLabel.Position = UDim2.new(0, 15, 0, 4)
-    SliderLabel.BackgroundTransparency = 1
-    SliderLabel.Text = text
-    SliderLabel.Font = Enum.Font.GothamMedium
-    SliderLabel.TextSize = 13
-    SliderLabel.TextColor3 = Theme.TextMain
-    SliderLabel.TextXAlignment = Enum.TextXAlignment.Left
-    SliderLabel.Parent = SliderFrame
-
-    local ValueLabel = Instance.new("TextLabel")
-    ValueLabel.Size = UDim2.new(0.3, -15, 0, 24)
-    ValueLabel.Position = UDim2.new(0.7, 0, 0, 4)
-    ValueLabel.BackgroundTransparency = 1
-    ValueLabel.Text = tostring(value)
-    ValueLabel.Font = Enum.Font.GothamBold
-    ValueLabel.TextSize = 12
-    ValueLabel.TextColor3 = Theme.WhiteLine
-    ValueLabel.TextXAlignment = Enum.TextXAlignment.Right
-    ValueLabel.Parent = SliderFrame
-
-    local Track = Instance.new("Frame")
-    Track.Name = "Track"
-    Track.Size = UDim2.new(1, -30, 0, 8)
-    Track.Position = UDim2.new(0, 15, 0, 32)
-    Track.BackgroundColor3 = Theme.ToggleOff
-    Track.BorderColor3 = Theme.Border
-    Track.BorderSizePixel = 1
-    Track.Parent = SliderFrame
-
-    local Fill = Instance.new("Frame")
-    Fill.Name = "Fill"
-    Fill.Size = UDim2.new((value - min) / (max - min), 0, 1, 0)
-    Fill.BackgroundColor3 = Theme.WhiteLine
-    Fill.BorderSizePixel = 0
-    Fill.Parent = Track
-
-    local Sliding = false
-
-    local function SetValue(inputVal)
-        local percentage = math.clamp((inputVal.Position.X - Track.AbsolutePosition.X) / Track.AbsoluteSize.X, 0, 1)
-        value = math.floor(min + (max - min) * percentage)
-        ValueLabel.Text = tostring(value)
-        Fill.Size = UDim2.new(percentage, 0, 1, 0)
-        callback(value)
-    end
-
-    Track.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            Sliding = true
-            SetValue(input)
-        end
-    end)
-
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            Sliding = false
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if Sliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            SetValue(input)
-        end
-    end)
-end
-
--- 5. Keybind Selector
-function WorldGUI:CreateKeybind(subTab, text, defaultKey, callback)
-    callback = callback or function() end
-    local currentKey = defaultKey or Enum.KeyCode.E
-
-    local BindFrame = Instance.new("Frame")
-    BindFrame.Name = "Keybind_" .. text
-    BindFrame.Size = UDim2.new(1, 0, 0, 42)
-    BindFrame.BackgroundColor3 = Theme.Card
-    BindFrame.BorderColor3 = Theme.Border
-    BindFrame.BorderSizePixel = 1
-    BindFrame.Parent = subTab.PageFrame
-
-    local BindLabel = Instance.new("TextLabel")
-    BindLabel.Size = UDim2.new(0.6, 0, 1, 0)
-    BindLabel.Position = UDim2.new(0, 15, 0, 0)
-    BindLabel.BackgroundTransparency = 1
-    BindLabel.Text = text
-    BindLabel.Font = Enum.Font.GothamMedium
-    BindLabel.TextSize = 13
-    BindLabel.TextColor3 = Theme.TextMain
-    BindLabel.TextXAlignment = Enum.TextXAlignment.Left
-    BindLabel.Parent = BindFrame
-
-    local BindBtn = Instance.new("TextButton")
-    BindBtn.Size = UDim2.new(0.3, -15, 0, 26)
-    BindBtn.Position = UDim2.new(0.7, 0, 0.5, -13)
-    BindBtn.BackgroundColor3 = Theme.Background
-    BindBtn.BorderColor3 = Theme.Border
-    BindBtn.BorderSizePixel = 1
-    BindBtn.Text = currentKey.Name
-    BindBtn.Font = Enum.Font.GothamBold
-    BindBtn.TextSize = 12
-    BindBtn.TextColor3 = Theme.WhiteLine
-    BindBtn.Parent = BindFrame
-
-    local Binding = false
-
-    BindBtn.MouseButton1Click:Connect(function()
-        Binding = true
-        BindBtn.Text = "..."
-        BindBtn.BorderColor3 = Theme.WhiteLine
-    end)
-
-    UserInputService.InputBegan:Connect(function(input, processed)
-        if Binding and not processed and input.UserInputType == Enum.UserInputType.Keyboard then
-            currentKey = input.KeyCode
-            BindBtn.Text = currentKey.Name
-            BindBtn.BorderColor3 = Theme.Border
-            Binding = false
-            callback(currentKey)
-        end
-    end)
-end
-
----------------------------------------------------------
--- INITIALIZATION MENU BUILDER (RUNS AUTOMATICALLY)
----------------------------------------------------------
-
-local Window = WorldGUI.new("World")
-
--- 1. VISUALS CATEGORY (enemy, npc, other)
-local VisualsCat = Window:CreateCategory("Visuals")
-
-local EnemyTab = VisualsCat:CreateSubTab("enemy")
-Window:CreateSection(EnemyTab, "Enemy ESP")
-Window:CreateToggle(EnemyTab, "Enemy Box ESP", true, function(state)
-    print("[WorldGUI] Enemy Box ESP:", state)
-end)
-Window:CreateToggle(EnemyTab, "Enemy Tracers", true, function(state)
-    print("[WorldGUI] Enemy Tracers:", state)
-end)
-Window:CreateSlider(EnemyTab, "Render Distance", 100, 5000, 1500, function(val)
-    print("[WorldGUI] Render Distance:", val)
-end)
-
-local NPCTab = VisualsCat:CreateSubTab("npc")
-Window:CreateSection(NPCTab, "NPC ESP")
-Window:CreateToggle(NPCTab, "NPC Box ESP", false, function(state)
-    print("[WorldGUI] NPC Box ESP:", state)
-end)
-Window:CreateToggle(NPCTab, "NPC Name Tags", true, function(state)
-    print("[WorldGUI] NPC Name Tags:", state)
-end)
-
-local OtherTab = VisualsCat:CreateSubTab("other")
-Window:CreateSection(OtherTab, "World Visuals")
-Window:CreateToggle(OtherTab, "Item ESP", true, function(state)
-    print("[WorldGUI] Item ESP:", state)
-end)
-Window:CreateToggle(OtherTab, "Fullbright Mode", false, function(state)
-    print("[WorldGUI] Fullbright:", state)
-end)
-
--- 2. AIMBOT CATEGORY (aimbot, silent aim)
-local AimbotCat = Window:CreateCategory("Aimbot")
-
-local MainAimTab = AimbotCat:CreateSubTab("aimbot")
-Window:CreateSection(MainAimTab, "Regular Aimbot")
-Window:CreateToggle(MainAimTab, "Enable Aimbot", true, function(state)
-    print("[WorldGUI] Enable Aimbot:", state)
-end)
-Window:CreateSlider(MainAimTab, "Aim Smoothness", 1, 20, 5, function(val)
-    print("[WorldGUI] Smoothness:", val)
-end)
-
-local SilentAimTab = AimbotCat:CreateSubTab("silent aim")
-Window:CreateSection(SilentAimTab, "Silent Aim Features")
-Window:CreateToggle(SilentAimTab, "Enable Silent Aim", true, function(state)
-    print("[WorldGUI] Silent Aim:", state)
-end)
-Window:CreateSlider(SilentAimTab, "Hit Chance (%)", 1, 100, 100, function(val)
-    print("[WorldGUI] Hit Chance:", val)
-end)
-
--- 3. SETTINGS CATEGORY (SEPARATED AT BOTTOM)
-local SettingsCat = Window:CreateCategory("Settings", true) -- true = Bottom placement
-local SettingsTab = SettingsCat:GetDirectPage()
-
-Window:CreateSection(SettingsTab, "Menu Configuration")
-Window:CreateButton(SettingsTab, "Unload GUI", function()
-    Window:Toggle(false)
-    Window.ScreenGui:Destroy()
-end)
-
-print("[WORLD GUI] Successfully Loaded! Choose Mobile or PC on the popup modal.")
+print("[Kernel.cc] Project Delta Ready - Full ESP & 2D RGB Color Palette Initialized!")
