@@ -1,0 +1,227 @@
+-- Script Path: game:GetService("StarterPlayer").StarterPlayerScripts.bo.bo
+-- Took 0s to decompile.
+-- Executor: Real (1.7.4)
+
+--[[
+__________                   __               __    __________              .__
+\______   \_______  ____    |__| ____   _____/  |_  \______   \ ____ _____  |  |
+ |     ___/\_  __ \/  _ \   |  |/ __ \_/ ___\   __\  |       _// __ \\__  \ |  |
+ |    |     |  | \(  <_> )  |  \  ___/\  \___|  |    |    |   \  ___/ / __ \|  |__
+ |____|     |__|   \____/\__|  |\___  >\___  >__|    |____|_  /\___  >____  /____/
+                        \______|    \/     \/               \/     \/     \/
+]]
+--                           Project Real  |  Luau Decompiler
+--                                   Made by @zinvera
+--                    File: StarterPlayer.StarterPlayerScripts.bo.bo
+--                               Dumped in 0.00247 seconds
+--                          Bytecode version 9  |  18 functions
+
+local LocalPlayer = game.Players.LocalPlayer
+local u3 = {}
+local ReplicatorChassis = game.ReplicatedStorage:WaitForChild("ReplicatorChassis", 5)
+local u11 = false
+local function propChanged(p1, p2, p3) -- Line: 7
+    if p2.Name ~= "NonQuery" and not (string.find(p2.Name, "LOW")) then
+        local v1 = string.lower(p2.Name)
+        if not (string.find(v1, "bush")) then
+            local PropertyChangedSignal = p2:GetPropertyChangedSignal(p3)
+            local v2 = PropertyChangedSignal:Connect(function() end)
+            table.insert(p1, v2)
+        end
+    end
+end
+local u13 = 0
+task.defer(function() -- Line: 18 -- upvalues: u13 (ref)
+    while task.wait(0.1) do
+        u13 = 0
+    end
+end)
+task.wait(3)
+workspace.Vehicles.ChildAdded:Connect(function(p1) -- Line: 30 -- upvalues: LocalPlayer (val), u3 (val)
+    if p1.Name ~= "Chassis" .. LocalPlayer.Name then
+        local v1 = p1.DescendantRemoving:Connect(function(a1) -- Line: 32 -- upvalues: p1 (val)
+            if a1:IsA("BasePart") then
+                if string.find(a1.Name, "RHA") then
+                    if -400 < a1.Position.Y and 25 < game.ReplicatedStorage.MatchTimer.Value and p1:GetAttribute("Dead") ~= true then
+                        task.delay(2, function() -- Line: 35 -- upvalues: p1 (upval), a1 (val)
+                            if p1:IsDescendantOf(workspace.Vehicles) then
+                                game.ReplicatedStorage.yor:FireServer(a1)
+                            end
+                        end)
+                    end
+                elseif a1.Name == "NERA" then
+                    if -400 < a1.Position.Y and 25 < game.ReplicatedStorage.MatchTimer.Value and p1:GetAttribute("Dead") ~= true then
+                        task.delay(2, function() -- Line: 35 -- upvalues: p1 (upval), a1 (val)
+                            if p1:IsDescendantOf(workspace.Vehicles) then
+                                game.ReplicatedStorage.yor:FireServer(a1)
+                            end
+                        end)
+                    end
+                elseif a1.Name == "Composite Screen" then
+                    if -400 < a1.Position.Y and 25 < game.ReplicatedStorage.MatchTimer.Value and p1:GetAttribute("Dead") ~= true then
+                        task.delay(2, function() -- Line: 35 -- upvalues: p1 (upval), a1 (val)
+                            if p1:IsDescendantOf(workspace.Vehicles) then
+                                game.ReplicatedStorage.yor:FireServer(a1)
+                            end
+                        end)
+                    end
+                elseif a1.Name == "HHRA" then
+                    if -400 < a1.Position.Y and 25 < game.ReplicatedStorage.MatchTimer.Value and p1:GetAttribute("Dead") ~= true then
+                        task.delay(2, function() -- Line: 35 -- upvalues: p1 (upval), a1 (val)
+                            if p1:IsDescendantOf(workspace.Vehicles) then
+                                game.ReplicatedStorage.yor:FireServer(a1)
+                            end
+                        end)
+                    end
+                elseif a1.Name == "CHA" then
+                    if -400 < a1.Position.Y and 25 < game.ReplicatedStorage.MatchTimer.Value and p1:GetAttribute("Dead") ~= true then
+                        task.delay(2, function() -- Line: 35 -- upvalues: p1 (upval), a1 (val)
+                            if p1:IsDescendantOf(workspace.Vehicles) then
+                                game.ReplicatedStorage.yor:FireServer(a1)
+                            end
+                        end)
+                    end
+                elseif string.find(a1.Name, "Aluminium Alloy") then
+                    if -400 < a1.Position.Y and 25 < game.ReplicatedStorage.MatchTimer.Value and p1:GetAttribute("Dead") ~= true then
+                        task.delay(2, function() -- Line: 35 -- upvalues: p1 (upval), a1 (val)
+                            if p1:IsDescendantOf(workspace.Vehicles) then
+                                game.ReplicatedStorage.yor:FireServer(a1)
+                            end
+                        end)
+                    end
+                elseif a1.Name == "APS" then
+                    if -400 < a1.Position.Y and 25 < game.ReplicatedStorage.MatchTimer.Value and p1:GetAttribute("Dead") ~= true then
+                        task.delay(2, function() -- Line: 35 -- upvalues: p1 (upval), a1 (val)
+                            if p1:IsDescendantOf(workspace.Vehicles) then
+                                game.ReplicatedStorage.yor:FireServer(a1)
+                            end
+                        end)
+                    end
+                elseif a1.Name == "APS Radar" and -400 < a1.Position.Y and 25 < game.ReplicatedStorage.MatchTimer.Value and p1:GetAttribute("Dead") ~= true then
+                    task.delay(2, function() -- Line: 35 -- upvalues: p1 (upval), a1 (val)
+                        if p1:IsDescendantOf(workspace.Vehicles) then
+                            game.ReplicatedStorage.yor:FireServer(a1)
+                        end
+                    end)
+                end
+            end
+        end)
+        table.insert(u3, v1)
+    end
+end)
+game.ReplicatedStorage.MatchTimer.Changed:Connect(function(p1) -- Line: 47 -- upvalues: u11 (ref), u3 (val), LocalPlayer (val), u13 (ref), propChanged (val)
+    local v1, v2, v3
+    if p1 == 0 then
+        u11 = false
+        v1 = next
+        v2 = u3
+        v3 = nil
+        for k4, k5 in v1, v2, v3 do
+            u3[k4]:Disconnect()
+            u3[k4] = nil
+        end
+        return
+    end
+    if u11 == false then
+        local Descendants_3, Descendants_4
+        u11 = true
+        v1 = workspace.Map:FindFirstChildWhichIsA("Folder").DescendantRemoving:Connect(function(p1) -- Line: 57
+            if not (p1:IsA("BasePart")) then end
+        end)
+        table.insert(u3, v1)
+        v2 = game.Lighting.DescendantRemoving:Connect(function(p1) -- Line: 65 -- upvalues: LocalPlayer (upval)
+            if p1:IsA("Atmosphere") and 25 < game.ReplicatedStorage.MatchTimer.Value then
+                LocalPlayer:Kick("reason 1002")
+            end
+        end)
+        table.insert(u3, v2)
+        if workspace:FindFirstChild("DestructibleObjects") then
+            local PropertyChangedSignal = workspace.DestructibleObjects:GetPropertyChangedSignal("Parent")
+            v3 = PropertyChangedSignal:Connect(function() -- Line: 74 -- upvalues: LocalPlayer (upval)
+                if 25 < game.ReplicatedStorage.MatchTimer.Value then
+                    LocalPlayer:Kick("reason 1003")
+                end
+            end)
+            table.insert(u3, v3)
+        end
+        if workspace:FindFirstChild("DestructibleObjects") then
+            local Children, Children_2, Descendants, Descendants_2, PropertyChangedSignal_2, PropertyChangedSignal_3, PropertyChangedSignal_4, v4, v5
+            v3 = next
+            Children, Children_2 = workspace.DestructibleObjects:GetChildren()
+            for k, v in v3, Children, Children_2 do
+                if v:IsA("BasePart") then
+                    PropertyChangedSignal_2 = v:GetPropertyChangedSignal("Position")
+                    v4 = PropertyChangedSignal_2:Connect(function() -- Line: 91 -- upvalues: v (val), u13 (upval), LocalPlayer (upval)
+                        if v.AssemblyLinearVelocity.Magnitude == 0 then
+                            u13 = u13 + 1
+                            if 50 <= u13 then
+                                LocalPlayer:Kick("reason 1004")
+                            end
+                        end
+                    end)
+                    table.insert(u3, v4)
+                elseif v:IsA("Model") then
+                    PropertyChangedSignal_3 = v:GetPropertyChangedSignal("Parent")
+                    v4 = PropertyChangedSignal_3:Connect(function() -- Line: 104 -- upvalues: u13 (upval)
+                        u13 = u13 + 1
+                    end)
+                    table.insert(u3, v4)
+                    PropertyChangedSignal_4 = v:GetPropertyChangedSignal("WorldPivot")
+                    v5 = PropertyChangedSignal_4:Connect(function() -- Line: 111 -- upvalues: v (val), u13 (upval), LocalPlayer (upval)
+                        if v:FindFirstChildWhichIsA("BasePart").AssemblyLinearVelocity.Magnitude == 0 then
+                            u13 = u13 + 1
+                            if 50 <= u13 then
+                                LocalPlayer:Kick("reason 1007")
+                            end
+                        end
+                    end)
+                    table.insert(u3, v5)
+                end
+            end
+            v3 = next
+            Descendants, Descendants_2 = workspace:WaitForChild("DestructibleObjects", 10):GetDescendants()
+            for k2, i in v3, Descendants, Descendants_2 do
+                if i:IsA("BasePart") then
+                    propChanged(u3, i, "CanQuery")
+                end
+            end
+        end
+        v3 = next
+        Descendants_3, Descendants_4 = workspace.Map:GetDescendants()
+        for k3, j in v3, Descendants_3, Descendants_4 do
+            if j:IsA("BasePart") then
+                propChanged(u3, j, "CanQuery")
+                propChanged(u3, j, "Transparency")
+            end
+        end
+    end
+end)
+game.Players.LocalPlayer.Changed:Connect(function(p1) -- Line: 144 -- upvalues: ReplicatorChassis (val)
+    if p1 == "Neutral" and game.Players.LocalPlayer.Neutral == true then
+        warn("zoop7")
+        ReplicatorChassis:FireServer(true, nil, 1, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "neutralTeam...lol!!!")
+    end
+end)
+workspace.Spawns.ChildAdded:Connect(function(p1) -- Line: 182 -- upvalues: ReplicatorChassis (val)
+    p1.Changed:Connect(function(p1) -- Line: 183 -- upvalues: ReplicatorChassis (upval)
+        if p1 == "Size" then
+            warn("zoop11")
+            ReplicatorChassis:FireServer(true, nil, 5, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "spawnsizechange")
+        end
+    end)
+end)
+local UserInputService = game:GetService("UserInputService")
+UserInputService.InputBegan:Connect(function(p1, p2) -- Line: 195 -- upvalues: UserInputService (val), LocalPlayer (val)
+    if p1.UserInputType == Enum.UserInputType.Keyboard and p1.KeyCode == Enum.KeyCode.B then
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                if LocalPlayer:IsInGroup(32380007) then
+                    LocalPlayer:Kick("Use of bloxstrap for 3D GUIs are not allowed. Please leave the group and rejoin the game.")
+                end
+            elseif UserInputService:IsKeyDown(Enum.KeyCode.RightShift) and LocalPlayer:IsInGroup(32380007) then
+                LocalPlayer:Kick("Use of bloxstrap for 3D GUIs are not allowed. Please leave the group and rejoin the game.")
+            end
+        elseif not (UserInputService:IsKeyDown(Enum.KeyCode.RightControl)) then
+        end
+    end
+end)
